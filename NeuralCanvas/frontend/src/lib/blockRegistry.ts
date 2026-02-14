@@ -5,6 +5,7 @@
 /** Categories that blocks can belong to. */
 export type BlockCategory =
   | "input"
+  | "output"
   | "layer"
   | "normalization"
   | "activation"
@@ -36,6 +37,7 @@ export interface BlockPort {
 /** All neural-network block types NeuralCanvas supports. */
 export type BlockType =
   | "Input"
+  | "Output"
   | "Linear"
   | "Conv2D"
   | "LSTM"
@@ -79,6 +81,7 @@ export interface BlockDefinition {
 // ---------------------------------------------------------------------------
 const CATEGORY_COLORS: Record<BlockCategory, string> = {
   input: "#f59e0b",        // amber
+  output: "#22c55e",       // green
   layer: "#6366f1",        // indigo
   normalization: "#14b8a6", // teal
   activation: "#f43f5e",   // rose
@@ -95,18 +98,26 @@ const INPUT_BLOCK: BlockDefinition = {
   label: "Input",
   icon: "database",
   category: "input",
-  defaultParams: { dataset: "MNIST" },
-  paramSchema: [
-    {
-      name: "dataset",
-      type: "select",
-      options: ["MNIST", "CIFAR", "TinyShakespeare"],
-    },
-  ],
+  defaultParams: {},
+  paramSchema: [],
   inputPorts: [],
   outputPorts: [{ id: "out", label: "Output" }],
   color: CATEGORY_COLORS.input,
-  description: "Loads a dataset and outputs its tensor shape.",
+  description: "Model input. Choose dataset in the Training panel.",
+};
+
+const OUTPUT_BLOCK: BlockDefinition = {
+  id: "Output",
+  type: "Output",
+  label: "Output",
+  icon: "circle-dot",
+  category: "output",
+  defaultParams: {},
+  paramSchema: [],
+  inputPorts: [{ id: "in", label: "Input" }],
+  outputPorts: [],
+  color: CATEGORY_COLORS.output,
+  description: "Sink for model output (e.g. logits or loss).",
 };
 
 const LINEAR_BLOCK: BlockDefinition = {
@@ -315,6 +326,7 @@ const SOFTMAX_BLOCK: BlockDefinition = {
  */
 export const BLOCK_REGISTRY: Record<BlockType, BlockDefinition> = {
   Input: INPUT_BLOCK,
+  Output: OUTPUT_BLOCK,
   Linear: LINEAR_BLOCK,
   Conv2D: CONV2D_BLOCK,
   LSTM: LSTM_BLOCK,

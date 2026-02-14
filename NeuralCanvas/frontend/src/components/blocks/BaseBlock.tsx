@@ -36,6 +36,7 @@ import { usePeepInsideContext } from "@/components/peep-inside/PeepInsideContext
 import { useGradientFlow, healthToColor } from "@/components/peep-inside/GradientFlowContext";
 import {
   Database,
+  CircleDot,
   ArrowRightLeft,
   Grid3X3,
   Repeat,
@@ -60,6 +61,7 @@ import {
 
 export const ICON_MAP: Record<string, LucideIcon> = {
   database: Database,
+  "circle-dot": CircleDot,
   "arrow-right-left": ArrowRightLeft,
   "grid-3x3": Grid3X3,
   repeat: Repeat,

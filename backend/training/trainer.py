@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 import asyncio
+import logging
 import time
 import torch
+
+logger = logging.getLogger(__name__)
 import torch.nn as nn
 from typing import Callable, Any
 from models.schemas import GraphSchema, TrainingConfig
@@ -98,11 +101,13 @@ async def train_model(
 
                 # Throttled batch update (~every 50 batches)
                 if batch_idx % 50 == 0:
+                    batch_loss = round(loss.item(), 6)
+                    logger.info("Training batch epoch=%s batch=%s loss=%s", epoch, batch_idx, batch_loss)
                     send_msg({
                         "type": "batch",
                         "epoch": epoch,
                         "batch": batch_idx,
-                        "loss": round(loss.item(), 6),
+                        "loss": batch_loss,
                     })
 
             train_loss = epoch_loss / len(train_loader)
@@ -128,6 +133,10 @@ async def train_model(
             val_acc = val_correct / val_total if val_total > 0 else 0
             elapsed = time.time() - start_time
 
+            logger.info(
+                "Training epoch=%s train_loss=%.4f val_loss=%.4f train_acc=%.2f%% val_acc=%.2f%% elapsed=%.1fs",
+                epoch, train_loss, val_loss, train_acc * 100, val_acc * 100, elapsed,
+            )
             send_msg({
                 "type": "epoch",
                 "epoch": epoch,
@@ -186,7 +195,16 @@ async def train_model(
     except Exception as e:
         await ws_callback({"type": "error", "message": str(e)})
     finally:
-        # Ensure the training thread completes
+        # Ensure the training thread completes; if it raised, send error to client
         if not train_future.done():
             stop_event.set()
+        try:
+            exc = train_future.exception()
+            if exc is not None:
+                await ws_callback({"type": "error", "message": str(exc)})
+        except Exception:
+            pass
+        try:
             await train_future
+        except Exception:
+            pass

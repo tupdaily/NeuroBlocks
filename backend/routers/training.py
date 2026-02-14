@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 import asyncio
+import logging
 import uuid
 import json
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
@@ -9,6 +10,7 @@ from models.schemas import TrainingRequest, GraphSchema, TrainingConfig
 from compiler.validator import validate_graph, ValidationError
 from training.trainer import train_model
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["training"])
 
 # Pending jobs: job_id -> TrainingRequest (stored between POST and WS connect)
@@ -47,9 +49,12 @@ async def training_websocket(websocket: WebSocket, job_id: str):
 
     Flow: POST /api/training/start -> get job_id -> connect WS -> training runs
     """
+    logger.info("Training WebSocket connection attempt job_id=%s", job_id)
     await websocket.accept()
+    logger.info("Training WebSocket accepted job_id=%s (client should receive 'connected' now)", job_id)
 
     if job_id not in pending_jobs:
+        logger.warning("Training WebSocket job_id=%s not in pending_jobs (client connected too late?)", job_id)
         await websocket.send_json({"type": "error", "message": "Job not found"})
         await websocket.close()
         return
@@ -57,10 +62,20 @@ async def training_websocket(websocket: WebSocket, job_id: str):
     request = pending_jobs.pop(job_id)
     stop_event = stop_events[job_id]
 
+    # Tell client we're connected so it can show "Preparing…" instead of "Connecting…"
+    await websocket.send_json({"type": "connected", "message": "Preparing training…"})
+    logger.info("Training WebSocket sent 'connected' job_id=%s", job_id)
+
     async def ws_callback(msg: dict):
         try:
+            mtype = msg.get("type", "")
+            if mtype == "batch":
+                logger.debug("Training batch job_id=%s epoch=%s batch=%s loss=%s", job_id, msg.get("epoch"), msg.get("batch"), msg.get("loss"))
+            elif mtype == "epoch":
+                logger.info("Training epoch job_id=%s epoch=%s train_loss=%s val_loss=%s train_acc=%s val_acc=%s", job_id, msg.get("epoch"), msg.get("train_loss"), msg.get("val_loss"), msg.get("train_acc"), msg.get("val_acc"))
             await websocket.send_json(msg)
-        except Exception:
+        except Exception as e:
+            logger.exception("Training WebSocket send failed job_id=%s: %s", job_id, e)
             stop_event.set()
 
     # Listen for stop commands from client in a background task
@@ -85,6 +100,7 @@ async def training_websocket(websocket: WebSocket, job_id: str):
     listener_task = asyncio.create_task(listen_for_commands())
 
     try:
+        logger.info("Training starting job_id=%s dataset_id=%s epochs=%s", job_id, request.dataset_id, request.training_config.epochs)
         await train_model(
             graph=request.graph,
             dataset_id=request.dataset_id,
@@ -92,7 +108,9 @@ async def training_websocket(websocket: WebSocket, job_id: str):
             ws_callback=ws_callback,
             stop_event=stop_event,
         )
+        logger.info("Training finished job_id=%s", job_id)
     except Exception as e:
+        logger.exception("Training failed job_id=%s: %s", job_id, e)
         await ws_callback({"type": "error", "message": str(e)})
     finally:
         listener_task.cancel()

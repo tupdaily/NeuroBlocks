@@ -45,12 +45,14 @@ import {
   usePeepInsideContext,
 } from "@/components/peep-inside/PeepInsideContext";
 import { PeepInsideModal } from "@/components/peep-inside/PeepInsideModal";
+import { TrainingPanel } from "@/components/training/TrainingPanel";
 import {
   GradientFlowProvider,
   useGradientFlow,
 } from "@/components/peep-inside/GradientFlowContext";
 import {
   InputBlock,
+  OutputBlock,
   LinearBlock,
   Conv2DBlock,
   LSTMBlock,
@@ -70,6 +72,7 @@ import {
 
 const nodeTypes: NodeTypes = {
   Input: InputBlock,
+  Output: OutputBlock,
   Linear: LinearBlock,
   Conv2D: Conv2DBlock,
   LSTM: LSTMBlock,
@@ -101,7 +104,7 @@ const INITIAL_NODES: Node[] = [
     id: "input-1",
     type: "Input",
     position: { x: 50, y: 200 },
-    data: { params: { dataset: "MNIST" } },
+    data: { params: {} },
   },
   {
     id: "flatten-1",
@@ -127,6 +130,12 @@ const INITIAL_NODES: Node[] = [
     position: { x: 1050, y: 200 },
     data: { params: { in_features: 128, out_features: 10 } },
   },
+  {
+    id: "output-1",
+    type: "Output",
+    position: { x: 1300, y: 200 },
+    data: { params: {} },
+  },
 ];
 
 const INITIAL_EDGES: Edge[] = [
@@ -134,6 +143,7 @@ const INITIAL_EDGES: Edge[] = [
   { id: "e-2", source: "flatten-1", target: "linear-1", type: "shape" },
   { id: "e-3", source: "linear-1", target: "activation-1", type: "shape" },
   { id: "e-4", source: "activation-1", target: "linear-2", type: "shape" },
+  { id: "e-5", source: "linear-2", target: "output-1", type: "shape" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -145,7 +155,8 @@ function CanvasInner() {
   const [edges, setEdges, onEdgesChange] = useEdgesState(INITIAL_EDGES);
   const { shapes, recompute } = useShapes();
   const { takeSnapshot, undo, redo } = useUndoRedo();
-  const [panOnDrag, setPanOnDrag] = useState(false);
+  const [panOnDrag, setPanOnDrag] = useState(true);
+  const [trainingPanelOpen, setTrainingPanelOpen] = useState(false);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const idCounter = useRef(100);
   const reactFlowInstance = useReactFlow();
@@ -298,16 +309,16 @@ function CanvasInner() {
         return;
       }
 
-      // Space → toggle pan mode
+      // Space (hold) → temporary selection mode so you can box-select
       if (e.key === " " && e.type === "keydown") {
         e.preventDefault();
-        setPanOnDrag(true);
+        setPanOnDrag(false);
       }
     };
 
     const keyUp = (e: KeyboardEvent) => {
       if (e.key === " ") {
-        setPanOnDrag(false);
+        setPanOnDrag(true);
       }
     };
 
@@ -401,25 +412,84 @@ function CanvasInner() {
       </ReactFlow>
 
       {/* ── Top-right toolbar ── */}
-      <GradientFlowToggle nodeIds={nodes.map((n) => n.id)} />
+      <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
+        <TrainingToggle
+          open={trainingPanelOpen}
+          onToggle={() => setTrainingPanelOpen((o) => !o)}
+        />
+      </div>
 
-      {/* ── Keyboard hint bar ── */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-3 px-4 py-1.5 rounded-full bg-neural-surface/80 border border-neural-border backdrop-blur text-[10px] text-neutral-500 font-mono select-none pointer-events-none">
-        <span>⌫ Delete</span>
-        <span className="text-neural-border">|</span>
-        <span>⌘Z Undo</span>
-        <span className="text-neural-border">|</span>
-        <span>⌘⇧Z Redo</span>
-        <span className="text-neural-border">|</span>
-        <span>⌘D Duplicate</span>
-        <span className="text-neural-border">|</span>
-        <span>Space Pan</span>
+      {/* ── Training panel (slide-out) ── */}
+      <TrainingPanel
+        open={trainingPanelOpen}
+        onClose={() => setTrainingPanelOpen(false)}
+        nodes={nodes}
+        edges={edges}
+      />
+
+      {/* ── Bottom bar: keyboard hints + gradient flow toggle ── */}
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-3 px-4 py-1.5 rounded-full bg-neural-surface/80 border border-neural-border backdrop-blur text-[10px] font-mono select-none">
+        <span className="text-neutral-500 pointer-events-none">⌫ Delete</span>
+        <span className="text-neural-border pointer-events-none">|</span>
+        <span className="text-neutral-500 pointer-events-none">⌘Z Undo</span>
+        <span className="text-neural-border pointer-events-none">|</span>
+        <span className="text-neutral-500 pointer-events-none">⌘⇧Z Redo</span>
+        <span className="text-neural-border pointer-events-none">|</span>
+        <span className="text-neutral-500 pointer-events-none">⌘D Duplicate</span>
+        <span className="text-neural-border pointer-events-none">|</span>
+        <span className="text-neutral-500 pointer-events-none">Drag background to pan</span>
+        <span className="text-neural-border pointer-events-none">|</span>
+        <span className="text-neutral-500 pointer-events-none">Space: box select</span>
+        <span className="text-neural-border pointer-events-none">|</span>
+        <GradientFlowToggle nodeIds={nodes.map((n) => n.id)} />
       </div>
       </div>
 
       {/* ── Peep Inside Modal ── */}
       <PeepInsideOverlay />
     </div>
+  );
+}
+
+// ── Training panel toggle button ──
+function TrainingToggle({
+  open,
+  onToggle,
+}: {
+  open: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      onClick={onToggle}
+      className={`
+        flex items-center gap-2 px-3 py-1.5 rounded-full
+        border backdrop-blur text-[10px] font-mono font-semibold
+        transition-all duration-200 select-none
+        ${
+          open
+            ? "bg-neural-accent/20 border-neural-accent/50 text-neural-accent-light shadow-[0_0_20px_rgba(139,92,246,0.15)]"
+            : "bg-neural-surface/80 border-neural-border text-neutral-500 hover:text-neutral-300 hover:border-neutral-600"
+        }
+      `}
+      title={open ? "Close training panel" : "Open training panel"}
+    >
+      <svg
+        width="12"
+        height="12"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+        <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+        <line x1="12" y1="22.08" x2="12" y2="12" />
+      </svg>
+      Train
+    </button>
   );
 }
 
@@ -440,8 +510,7 @@ function GradientFlowToggle({ nodeIds }: { nodeIds: string[] }) {
     <button
       onClick={handleToggle}
       className={`
-        absolute top-4 right-4 z-20
-        flex items-center gap-2 px-3 py-1.5 rounded-full
+        flex items-center gap-2 px-2.5 py-1 rounded-full
         border backdrop-blur text-[10px] font-mono font-semibold
         transition-all duration-200 select-none
         ${

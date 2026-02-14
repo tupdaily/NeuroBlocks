@@ -161,17 +161,8 @@ function computeBlockShape(
   switch (blockType) {
     // ----- Input -----
     case "Input": {
-      const dataset = strParam(params, "dataset", "MNIST");
-      switch (dataset) {
-        case "MNIST":
-          return { outputShape: ["B", 1, 28, 28] };
-        case "CIFAR":
-          return { outputShape: ["B", 3, 32, 32] };
-        case "TinyShakespeare":
-          return { outputShape: ["B", "seq"] };
-        default:
-          return { outputShape: null, error: `Unknown dataset "${dataset}".` };
-      }
+      // Shape is for display only; actual input shape comes from dataset chosen in Training panel.
+      return { outputShape: ["B", 1, 28, 28] };
     }
 
     // ----- Linear -----
@@ -327,6 +318,12 @@ function computeBlockShape(
     case "Softmax": {
       if (!inputShape) return { outputShape: null, error: "No input connected." };
       return { outputShape: [...inputShape] };
+    }
+
+    // ----- Output (sink: accepts any shape, no output) -----
+    case "Output": {
+      if (!inputShape) return { outputShape: null, error: "No input connected." };
+      return { outputShape: null }; // Sink — no downstream shape.
     }
 
     // ----- Embedding -----
@@ -592,6 +589,10 @@ export function validateConnection(
     case "Dropout":
     case "Softmax":
     case "Input":
+      return { valid: true };
+
+    // Output accepts any shape.
+    case "Output":
       return { valid: true };
 
     default:

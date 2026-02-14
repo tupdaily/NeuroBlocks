@@ -4,6 +4,7 @@
 
 export { BaseBlock } from "./BaseBlock";
 export { InputBlock } from "./InputBlock";
+export { OutputBlock } from "./OutputBlock";
 export { LinearBlock } from "./LinearBlock";
 export { Conv2DBlock } from "./Conv2DBlock";
 export { LSTMBlock } from "./LSTMBlock";

@@ -12,6 +12,7 @@ import {
 } from "@/lib/blockRegistry";
 import {
   Database,
+  CircleDot,
   ArrowRightLeft,
   Grid3X3,
   Repeat,
@@ -37,6 +38,7 @@ import {
 
 const ICON_MAP: Record<string, LucideIcon> = {
   database: Database,
+  "circle-dot": CircleDot,
   "arrow-right-left": ArrowRightLeft,
   "grid-3x3": Grid3X3,
   repeat: Repeat,
@@ -58,6 +60,7 @@ const CATEGORIES: {
   color: string;
 }[] = [
   { key: "input", label: "Input", emoji: "📥", color: "#f59e0b" },
+  { key: "output", label: "Output", emoji: "📤", color: "#22c55e" },
   { key: "layer", label: "Layers", emoji: "🧱", color: "#6366f1" },
   { key: "activation", label: "Activations", emoji: "⚡", color: "#f43f5e" },
   { key: "normalization", label: "Normalization", emoji: "📏", color: "#14b8a6" },
