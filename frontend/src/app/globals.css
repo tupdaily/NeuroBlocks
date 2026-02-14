@@ -19,6 +19,16 @@
   --glow: 0 0 20px rgba(6, 182, 212, 0.15);
   --radius: 8px;
   --radius-lg: 12px;
+  /* NeuralCanvas theme (for playground) */
+  --neural-bg: #0b0f1a;
+  --neural-surface: #111827;
+  --neural-border: #1f2937;
+  --neural-muted: #6b7280;
+  --neural-accent: #8b5cf6;
+  --neural-accent-light: #a78bfa;
+  --neural-success: #10b981;
+  --neural-warning: #f59e0b;
+  --neural-error: #ef4444;
 }
 
 @theme inline {
@@ -26,6 +36,16 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  /* NeuralCanvas palette */
+  --color-neural-bg: var(--neural-bg);
+  --color-neural-surface: var(--neural-surface);
+  --color-neural-border: var(--neural-border);
+  --color-neural-muted: var(--neural-muted);
+  --color-neural-accent: var(--neural-accent);
+  --color-neural-accent-light: var(--neural-accent-light);
+  --color-neural-success: var(--neural-success);
+  --color-neural-warning: var(--neural-warning);
+  --color-neural-error: var(--neural-error);
 }
 
 * {

@@ -5,12 +5,19 @@ import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
 import { useEffect, useState } from "react";
 import { listPlaygrounds } from "@/lib/supabase/playgrounds";
+import { listLevels } from "@/lib/supabase/levels";
 import type { PlaygroundRow } from "@/types/playground";
+import type { LevelRow } from "@/types/level";
+
+type TabId = "playground" | "challenges";
 
 export function HomeDashboard({ user }: { user: User }) {
   const supabase = createClient();
+  const [activeTab, setActiveTab] = useState<TabId>("playground");
   const [playgrounds, setPlaygrounds] = useState<PlaygroundRow[]>([]);
+  const [levels, setLevels] = useState<LevelRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [levelsLoading, setLevelsLoading] = useState(false);
 
   useEffect(() => {
     listPlaygrounds().then((list) => {
@@ -18,6 +25,15 @@ export function HomeDashboard({ user }: { user: User }) {
       setLoading(false);
     });
   }, []);
+
+  useEffect(() => {
+    if (activeTab !== "challenges") return;
+    setLevelsLoading(true);
+    listLevels().then((list) => {
+      setLevels(list);
+      setLevelsLoading(false);
+    });
+  }, [activeTab]);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -60,74 +76,198 @@ export function HomeDashboard({ user }: { user: User }) {
         </div>
       </header>
 
-      <main className="flex-1 p-6 md:p-10">
-        <h2 className="text-xl font-medium text-[var(--foreground)] mb-1">
-          Welcome back
-        </h2>
-        <p className="text-[var(--foreground-muted)] mb-8">
-          Create a new playground or open an existing one.
-        </p>
+      <main className="flex-1 flex flex-col min-h-0">
+        <div className="border-b border-[var(--border)] bg-gradient-to-b from-[var(--surface)]/50 to-[var(--background)]">
+          <div className="mx-auto max-w-6xl px-6 pt-10 pb-6">
+            <h1 className="text-2xl font-semibold tracking-tight text-[var(--foreground)] sm:text-3xl">
+              Welcome back, {displayName.split(/\s+/)[0]}
+            </h1>
+            <p className="mt-1 text-[var(--foreground-muted)]">
+              {activeTab === "playground"
+                ? "Build and run visual workflows in your playgrounds."
+                : "Practice with guided challenges and level up your skills."}
+            </p>
 
-        <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 max-w-6xl">
-          <Link
-            href="/playground"
-            className="group flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-[var(--border)] bg-[var(--surface)] min-h-[140px] p-6 transition hover:border-[var(--accent)] hover:bg-[var(--accent-muted)]/50"
-          >
-            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--accent-muted)] text-[var(--accent)] group-hover:bg-[var(--accent)]/20 mb-3">
-              <PlusIcon />
-            </span>
-            <span className="text-sm font-medium text-[var(--foreground)]">
-              New playground
-            </span>
-          </Link>
+            <nav
+              className="mt-8 flex gap-0.5 rounded-xl bg-[var(--surface-elevated)] p-1 w-fit"
+              aria-label="Main sections"
+            >
+              <button
+                type="button"
+                onClick={() => setActiveTab("playground")}
+                className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition ${
+                  activeTab === "playground"
+                    ? "bg-[var(--surface)] text-[var(--foreground)] shadow-sm"
+                    : "text-[var(--foreground-muted)] hover:text-[var(--foreground)]"
+                }`}
+              >
+                <PlaygroundIcon className="h-4 w-4" />
+                Playground
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("challenges")}
+                className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition ${
+                  activeTab === "challenges"
+                    ? "bg-[var(--surface)] text-[var(--foreground)] shadow-sm"
+                    : "text-[var(--foreground-muted)] hover:text-[var(--foreground)]"
+                }`}
+              >
+                <ChallengesIcon className="h-4 w-4" />
+                Challenges
+              </button>
+            </nav>
+          </div>
+        </div>
 
-          {loading ? (
-            [...Array(3)].map((_, i) => (
-              <div
-                key={i}
-                className="rounded-xl border border-[var(--border)] bg-[var(--surface)] min-h-[140px] p-4 animate-pulse"
-              >
-                <div className="h-4 bg-[var(--border-muted)] rounded w-3/4 mb-3" />
-                <div className="h-3 bg-[var(--border-muted)] rounded w-1/2" />
-              </div>
-            ))
-          ) : (
-            playgrounds.map((pg) => (
-              <Link
-                key={pg.id}
-                href={`/playground/${pg.id}`}
-                className="group rounded-xl border border-[var(--border)] bg-[var(--surface)] min-h-[140px] p-4 flex flex-col transition hover:border-[var(--accent)] hover:bg-[var(--accent-muted)]/50"
-              >
-                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--accent-muted)] text-[var(--accent)] mb-3 group-hover:bg-[var(--accent)]/20 shrink-0">
-                  <PlaygroundIcon />
-                </span>
-                <h3 className="font-medium text-[var(--foreground)] truncate mb-1">
-                  {pg.name}
-                </h3>
-                <p className="text-xs text-[var(--foreground-muted)] mt-auto">
-                  {formatDate(pg.updated_at)}
-                </p>
-              </Link>
-            ))
-          )}
+        <div className="flex-1 overflow-auto">
+          <div className="mx-auto max-w-6xl px-6 py-8">
+            {activeTab === "playground" && (
+              <section>
+                <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                  <Link
+                    href="/playground"
+                    className="group flex flex-col items-center justify-center rounded-2xl border border-[var(--border)] bg-[var(--surface)] min-h-[160px] p-6 transition hover:border-[var(--accent)]/50 hover:bg-[var(--surface-elevated)] hover:shadow-[var(--glow)]"
+                  >
+                    <span className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--accent-muted)] text-[var(--accent)] transition group-hover:bg-[var(--accent)]/20">
+                      <PlusIcon className="h-7 w-7" />
+                    </span>
+                    <span className="text-sm font-medium text-[var(--foreground)]">
+                      New playground
+                    </span>
+                    <span className="mt-1 text-xs text-[var(--foreground-muted)]">
+                      Start from scratch
+                    </span>
+                  </Link>
+
+                  {loading ? (
+                    [...Array(4)].map((_, i) => (
+                      <div
+                        key={i}
+                        className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] min-h-[160px] p-5 animate-pulse"
+                      >
+                        <div className="mb-4 h-12 w-12 rounded-2xl bg-[var(--border-muted)]" />
+                        <div className="mb-2 h-4 rounded bg-[var(--border-muted)] w-3/4" />
+                        <div className="h-3 rounded bg-[var(--border-muted)] w-1/2" />
+                      </div>
+                    ))
+                  ) : (
+                    playgrounds.map((pg) => (
+                      <Link
+                        key={pg.id}
+                        href={`/playground/${pg.id}`}
+                        className="group rounded-2xl border border-[var(--border)] bg-[var(--surface)] min-h-[160px] p-5 flex flex-col transition hover:border-[var(--border)] hover:bg-[var(--surface-elevated)] hover:shadow-[var(--glow)]"
+                      >
+                        <span className="mb-3 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-muted)] text-[var(--accent)] transition group-hover:bg-[var(--accent)]/20">
+                          <PlaygroundIcon className="h-5 w-5" />
+                        </span>
+                        <h3 className="font-medium text-[var(--foreground)] truncate mb-0.5">
+                          {pg.name}
+                        </h3>
+                        <p className="mt-auto text-xs text-[var(--foreground-muted)]">
+                          Updated {formatDate(pg.updated_at)}
+                        </p>
+                      </Link>
+                    ))
+                  )}
+                </div>
+              </section>
+            )}
+
+            {activeTab === "challenges" && (
+              <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
+                <div className="border-b border-[var(--border)] bg-[var(--surface-elevated)]/50 px-6 py-4">
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 text-amber-500">
+                      <ChallengesIcon className="h-5 w-5" />
+                    </span>
+                    <div>
+                      <h2 className="text-base font-semibold text-[var(--foreground)]">
+                        Challenges
+                      </h2>
+                      <p className="text-sm text-[var(--foreground-muted)]">
+                        Guided exercises to practice and improve.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div className="p-6">
+                  {levelsLoading ? (
+                    <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
+                      {[...Array(3)].map((_, i) => (
+                        <div
+                          key={i}
+                          className="rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] min-h-[140px] p-5 animate-pulse"
+                        >
+                          <div className="mb-3 h-10 w-10 rounded-xl bg-[var(--border-muted)]" />
+                          <div className="mb-2 h-4 rounded bg-[var(--border-muted)] w-3/4" />
+                          <div className="h-3 rounded bg-[var(--border-muted)] w-full" />
+                        </div>
+                      ))}
+                    </div>
+                  ) : levels.length === 0 ? (
+                    <div className="flex min-h-[240px] flex-col items-center justify-center gap-4 py-12 text-center">
+                      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--surface-elevated)] text-[var(--foreground-muted)]">
+                        <ChallengesIcon className="h-8 w-8" />
+                      </div>
+                      <p className="font-medium text-[var(--foreground)]">
+                        No challenges yet
+                      </p>
+                      <p className="max-w-sm text-sm text-[var(--foreground-muted)]">
+                        We&apos;re preparing challenges for you. Check back soon.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
+                      {levels.map((level) => (
+                        <Link
+                          key={level.id}
+                          href={`/playground?level=${level.level_number}`}
+                          className="group rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] min-h-[140px] p-5 flex flex-col transition hover:border-amber-500/50 hover:bg-[var(--surface)] hover:shadow-[var(--glow)]"
+                        >
+                          <span className="mb-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 text-amber-500 transition group-hover:bg-amber-500/25">
+                            <ChallengesIcon className="h-5 w-5" />
+                          </span>
+                          <span className="text-xs font-medium text-[var(--foreground-muted)]">
+                            Level {level.level_number}
+                          </span>
+                          <h3 className="font-medium text-[var(--foreground)] mt-0.5 truncate">
+                            {level.name}
+                          </h3>
+                          {level.description && (
+                            <p className="mt-2 text-sm text-[var(--foreground-muted)] line-clamp-2">
+                              {level.description}
+                            </p>
+                          )}
+                          <span className="mt-auto pt-3 text-sm text-amber-600 dark:text-amber-400 font-medium opacity-0 group-hover:opacity-100 transition">
+                            Start →
+                          </span>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </section>
+            )}
+          </div>
         </div>
       </main>
     </div>
   );
 }
 
-function PlusIcon() {
+function PlusIcon({ className }: { className?: string }) {
   return (
-    <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+    <svg className={className ?? "h-6 w-6"} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
     </svg>
   );
 }
 
-function PlaygroundIcon() {
+function PlaygroundIcon({ className }: { className?: string }) {
   return (
     <svg
-      className="h-5 w-5"
+      className={className ?? "h-5 w-5"}
       fill="none"
       stroke="currentColor"
       viewBox="0 0 24 24"
@@ -138,6 +278,25 @@ function PlaygroundIcon() {
         strokeLinejoin="round"
         strokeWidth={2}
         d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"
+      />
+    </svg>
+  );
+}
+
+function ChallengesIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className ?? "h-5 w-5"}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+      aria-hidden
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"
       />
     </svg>
   );
