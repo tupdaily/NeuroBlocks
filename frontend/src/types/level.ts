@@ -10,6 +10,8 @@ export interface LevelRow {
   graph_json: GraphSchema;
   /** Correct answer graph for Submit check; null if level has no solution. */
   solution_graph_json: GraphSchema | null;
+  /** Display section: 'challenges' (guided exercises) or 'papers' (paper-based design tasks). Omit for legacy rows. */
+  section?: "challenges" | "papers";
   created_at: string;
   updated_at: string;
 }

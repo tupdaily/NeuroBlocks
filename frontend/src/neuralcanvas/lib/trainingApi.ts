@@ -59,7 +59,12 @@ const BACKEND_SUPPORTED_TYPES = new Set([
   "layernorm",
   "add",
   "concat",
-  "softmax", // backend treats unknown types as Identity
+  "softmax",
+  "positional_encoding",
+  "positional_embedding",
+  "attention",
+  "text_input",
+  "embedding",
 ]);
 
 /** Map frontend BlockType + params to backend node type and params. */
@@ -71,6 +76,14 @@ function toBackendNodeType(
   switch (frontendType) {
     case "Input":
       return { type: "input", params: { ...params, shape: [1, 28, 28] } };
+    case "TextInput":
+      return {
+        type: "text_input",
+        params: {
+          batch_size: params.batch_size ?? 1,
+          seq_len: params.seq_len ?? 128,
+        },
+      };
     case "Linear":
       return {
         type: "linear",
@@ -111,7 +124,39 @@ function toBackendNodeType(
         params: { num_features: params.num_features ?? 32 },
       };
     case "Softmax":
-      return { type: "softmax", params: {} }; // backend treats as Identity
+      return { type: "softmax", params: {} };
+    case "PositionalEncoding":
+      return {
+        type: "positional_encoding",
+        params: {
+          d_model: params.d_model ?? 128,
+          max_len: params.max_len ?? 512,
+        },
+      };
+    case "Attention":
+      return {
+        type: "attention",
+        params: {
+          embed_dim: params.embed_dim ?? 128,
+          num_heads: params.num_heads ?? 4,
+        },
+      };
+    case "TextEmbedding":
+      return {
+        type: "embedding",
+        params: {
+          num_embeddings: params.vocab_size ?? params.num_embeddings ?? 10000,
+          embedding_dim: params.embedding_dim ?? 128,
+        },
+      };
+    case "PositionalEmbedding":
+      return {
+        type: "positional_embedding",
+        params: {
+          d_model: params.d_model ?? 128,
+          max_len: params.max_len ?? 512,
+        },
+      };
     case "Output":
       return { type: "output", params: {} };
     default:

@@ -61,6 +61,7 @@ import { getApiBase } from "@/neuralcanvas/lib/trainingApi";
 import ReactMarkdown from "react-markdown";
 import {
   InputBlock,
+  TextInputBlock,
   OutputBlock,
   LinearBlock,
   Conv2DBlock,
@@ -72,6 +73,9 @@ import {
   DropoutBlock,
   FlattenBlock,
   EmbeddingBlock,
+  TextEmbeddingBlock,
+  PositionalEncodingBlock,
+  PositionalEmbeddingBlock,
   SoftmaxBlock,
   AddBlock,
   ConcatBlock,
@@ -84,22 +88,35 @@ import {
 // Task label shown on canvas for challenges; scales with zoom, coverable by other nodes
 const CHALLENGE_TASK_NODE_TYPE = "challengeTask";
 
-function ChallengeTaskNode({ data }: NodeProps<{ task?: string }>) {
+function ChallengeTaskNode({ data }: NodeProps<{ task?: string; isPaperLevel?: boolean }>) {
   const task = data?.task?.trim();
+  const isPaper = data?.isPaperLevel === true;
   if (!task) return null;
   return (
     <div
-      className="text-white font-medium select-none max-w-[280px] leading-tight"
-      style={{ fontSize: 11, pointerEvents: "none" }}
-      aria-label={`Challenge task: ${task}`}
+      className="text-white font-medium select-none max-w-[320px] leading-snug"
+      style={{
+        fontSize: 11,
+        pointerEvents: "none",
+        whiteSpace: isPaper ? "pre-line" : "normal",
+      }}
+      aria-label={isPaper ? "About this paper" : `Challenge task: ${task}`}
     >
-      Task: {task}
+      {isPaper ? (
+        <>
+          <span className="text-amber-400/90 font-semibold block mb-1">About this paper</span>
+          <span className="text-neutral-300 font-normal">{task}</span>
+        </>
+      ) : (
+        <>Task: {task}</>
+      )}
     </div>
   );
 }
 
 const nodeTypes: NodeTypes = {
   Input: InputBlock,
+  TextInput: TextInputBlock,
   Output: OutputBlock,
   Linear: LinearBlock,
   Conv2D: Conv2DBlock,
@@ -111,6 +128,9 @@ const nodeTypes: NodeTypes = {
   Dropout: DropoutBlock,
   Flatten: FlattenBlock,
   Embedding: EmbeddingBlock,
+  TextEmbedding: TextEmbeddingBlock,
+  PositionalEncoding: PositionalEncodingBlock,
+  PositionalEmbedding: PositionalEmbeddingBlock,
   Softmax: SoftmaxBlock,
   Add: AddBlock,
   Concat: ConcatBlock,
@@ -189,6 +209,7 @@ function CanvasInner({
   challengeSolutionGraph,
   challengeLevelNumber,
   onChallengeSuccess,
+  isPaperLevel,
 }: {
   initialNodes?: Node[];
   initialEdges?: Edge[];
@@ -197,6 +218,7 @@ function CanvasInner({
   challengeSolutionGraph?: GraphSchema | null;
   challengeLevelNumber?: number | null;
   onChallengeSuccess?: (levelNumber: number) => void;
+  isPaperLevel?: boolean;
 }) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes ?? INITIAL_NODES);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges ?? INITIAL_EDGES);
@@ -638,33 +660,37 @@ function CanvasInner({
             disabled={nodes.filter((n) => n.type !== CHALLENGE_TASK_NODE_TYPE).length === 0}
           />
         )}
-        <FeedbackButton
-          onSend={handleFeedbackSend}
-          loading={feedbackLoading}
-          disabled={nodes.length === 0}
-          messages={feedbackMessages}
-          chatOpen={feedbackChatOpen}
-          onOpenChat={() => setFeedbackChatOpen(true)}
-          onCloseChat={() => setFeedbackChatOpen(false)}
-        />
+        {!isPaperLevel && (
+          <FeedbackButton
+            onSend={handleFeedbackSend}
+            loading={feedbackLoading}
+            disabled={nodes.length === 0}
+            messages={feedbackMessages}
+            chatOpen={feedbackChatOpen}
+            onOpenChat={() => setFeedbackChatOpen(true)}
+            onCloseChat={() => setFeedbackChatOpen(false)}
+          />
+        )}
         <SaveButton
           onSave={handleSave}
           status={saveStatus}
           disabled={nodes.length === 0}
         />
-        <div className="relative">
-          <TrainingToggle
-            open={trainingPanelOpen}
-            onToggle={() => setTrainingPanelOpen((o) => !o)}
-          />
-          <TrainingPanel
-            open={trainingPanelOpen}
-            onClose={() => setTrainingPanelOpen(false)}
-            nodes={nodes}
-            edges={edges}
-            compact
-          />
-        </div>
+        {challengeLevelNumber == null && (
+          <div className="relative">
+            <TrainingToggle
+              open={trainingPanelOpen}
+              onToggle={() => setTrainingPanelOpen((o) => !o)}
+            />
+            <TrainingPanel
+              open={trainingPanelOpen}
+              onClose={() => setTrainingPanelOpen(false)}
+              nodes={nodes}
+              edges={edges}
+              compact
+            />
+          </div>
+        )}
       </div>
 
       {/* ── Bottom bar: keyboard hints + gradient flow toggle ── */}
@@ -1066,6 +1092,8 @@ export interface NeuralCanvasProps {
   playgroundName?: string;
   /** When provided (e.g. challenge level), a task label is shown on the canvas (scales with zoom, coverable). */
   challengeTask?: string | null;
+  /** When true, the task content is shown as "About this paper" with multi-line paper insights instead of "Task:". */
+  isPaperLevel?: boolean;
   /** When provided with a challenge, Submit checks current graph against this solution. */
   challengeSolutionGraph?: GraphSchema | null;
   /** Level number for the current challenge; when submit is correct, passed to onChallengeSuccess. */
@@ -1080,24 +1108,26 @@ export default function NeuralCanvas({
   playgroundId,
   playgroundName,
   challengeTask,
+  isPaperLevel = false,
   challengeSolutionGraph,
   challengeLevelNumber,
   onChallengeSuccess,
 }: NeuralCanvasProps = {}) {
   const effectiveInitialNodes = useMemo(() => {
     const base = initialNodes ?? INITIAL_NODES;
-    if (!challengeTask?.trim()) return base;
+    // For paper levels, paper info is shown in a separate panel (no overlay on canvas)
+    if (isPaperLevel || !challengeTask?.trim()) return base;
     const taskNode: Node = {
       id: CHALLENGE_TASK_NODE_ID,
       type: CHALLENGE_TASK_NODE_TYPE,
       position: { x: 24, y: 24 },
-      data: { task: challengeTask.trim() },
+      data: { task: challengeTask.trim(), isPaperLevel: false },
       draggable: false,
       selectable: false,
       connectable: false,
     };
     return [taskNode, ...base];
-  }, [initialNodes, challengeTask]);
+  }, [initialNodes, challengeTask, isPaperLevel]);
 
   return (
     <ReactFlowProvider>
@@ -1113,6 +1143,7 @@ export default function NeuralCanvas({
                 challengeSolutionGraph={challengeSolutionGraph}
                 challengeLevelNumber={challengeLevelNumber}
                 onChallengeSuccess={onChallengeSuccess}
+                isPaperLevel={isPaperLevel}
               />
             </div>
           </GradientFlowProvider>

@@ -101,6 +101,18 @@ body {
   }
 }
 
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-2px); }
+  80% { transform: translateX(2px); }
+}
+
+.animate-shake {
+  animation: shake 0.4s ease-in-out;
+}
+
 .react-flow__controls {
   background: var(--surface-elevated) !important;
   border: 1px solid var(--border) !important;

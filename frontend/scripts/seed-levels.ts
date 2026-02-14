@@ -226,7 +226,7 @@ const LEVEL_6_GRAPH: GraphSchema = {
   metadata: {
     name: "Level 6",
     created_at: new Date().toISOString(),
-    description: "Use an Add block for a residual connection: one branch goes through a layer, the other skips; Add merges them. (Both inputs to Add must have the same shape.)",
+    description: "Use the Add block with two inputs: a skip path and a path through Linear. Connect both of Add’s input ports.",
   },
 };
 
@@ -249,13 +249,77 @@ const LEVEL_6_SOLUTION: GraphSchema = {
   metadata: { name: "Level 6 solution", created_at: new Date().toISOString() },
 };
 
+// ---------------------------------------------------------------------------
+// Paper: Attention is All You Need (Vaswani et al.) — pre-built with text pipeline
+// ---------------------------------------------------------------------------
+
+/** Encoder layout matching "Attention is All You Need" diagram: bottom = Inputs → Input Embedding → Positional Encoding; then Nx encoder block = Multi-Head Attention → Add & Norm → Feed Forward → Add & Norm; top = Output. Y increases downward so diagram flows bottom-to-top. */
+const TRANSFORMER_PAPER_GRAPH: GraphSchema = {
+  version: "1.0",
+  nodes: [
+    // Bottom (diagram): Inputs → Input Embedding → Positional Encoding
+    { id: "text_input_1", type: "text_input", params: { batch_size: 1, seq_len: 128 }, position: { x: 80, y: 380 } },
+    { id: "text_embed_1", type: "text_embedding", params: { vocab_size: 10000, embedding_dim: 128 }, position: { x: 220, y: 380 } },
+    { id: "pos_embed_1", type: "positional_embedding", params: { d_model: 128, max_len: 512 }, position: { x: 360, y: 380 } },
+    // Encoder layer 1: Multi-Head Attention → Add & Norm
+    { id: "ln_pre", type: "layernorm", params: { normalized_shape: 128 }, position: { x: 320, y: 280 } },
+    { id: "attn", type: "attention", params: { embed_dim: 128, num_heads: 4 }, position: { x: 460, y: 280 } },
+    { id: "add_1", type: "add", params: {}, position: { x: 600, y: 280 } },
+    // Encoder layer 2: Feed Forward → Add & Norm
+    { id: "ln_mid", type: "layernorm", params: { normalized_shape: 128 }, position: { x: 320, y: 180 } },
+    { id: "linear_1", type: "linear", params: { in_features: 128, out_features: 512 }, position: { x: 460, y: 180 } },
+    { id: "relu_1", type: "activation", params: { activation: "relu" }, position: { x: 540, y: 180 } },
+    { id: "linear_2", type: "linear", params: { in_features: 512, out_features: 128 }, position: { x: 620, y: 180 } },
+    { id: "add_2", type: "add", params: {}, position: { x: 760, y: 180 } },
+    // Top (diagram): final LayerNorm → Output
+    { id: "ln_post", type: "layernorm", params: { normalized_shape: 128 }, position: { x: 320, y: 80 } },
+    { id: "output_1", type: "output", params: {}, position: { x: 460, y: 80 } },
+  ],
+  edges: [
+    { id: "e0a", source: "text_input_1", sourceHandle: "out", target: "text_embed_1", targetHandle: "in" },
+    { id: "e0b", source: "text_embed_1", sourceHandle: "out", target: "pos_embed_1", targetHandle: "in" },
+    { id: "e1", source: "pos_embed_1", sourceHandle: "out", target: "ln_pre", targetHandle: "in" },
+    { id: "e2", source: "pos_embed_1", sourceHandle: "out", target: "add_1", targetHandle: "in_a" },
+    { id: "e3", source: "ln_pre", sourceHandle: "out", target: "attn", targetHandle: "in" },
+    { id: "e4", source: "attn", sourceHandle: "out", target: "add_1", targetHandle: "in_b" },
+    { id: "e5", source: "add_1", sourceHandle: "out", target: "ln_mid", targetHandle: "in" },
+    { id: "e6", source: "ln_mid", sourceHandle: "out", target: "linear_1", targetHandle: "in" },
+    { id: "e7", source: "ln_mid", sourceHandle: "out", target: "add_2", targetHandle: "in_a" },
+    { id: "e8", source: "linear_1", sourceHandle: "out", target: "relu_1", targetHandle: "in" },
+    { id: "e9", source: "relu_1", sourceHandle: "out", target: "linear_2", targetHandle: "in" },
+    { id: "e10", source: "linear_2", sourceHandle: "out", target: "add_2", targetHandle: "in_b" },
+    { id: "e11", source: "add_2", sourceHandle: "out", target: "ln_post", targetHandle: "in" },
+    { id: "e12", source: "ln_post", sourceHandle: "out", target: "output_1", targetHandle: "in" },
+  ],
+  metadata: {
+    name: "Transformer (Vaswani et al.)",
+    created_at: new Date().toISOString(),
+    description: "Pre-built Transformer with text pipeline: Text Input → Text Embedding → Positional Embedding → one Encoder block (Self-Attention + FFN with residuals). Explore, run, and modify. Shapes: [B, seq] → [B, seq, 128] → encoder.",
+  },
+};
+
 const LEVELS = [
-  { level_number: 1, name: "Connect input to output", description: LEVEL_1_GRAPH.metadata.description!, task: "Create a feed forward network using the flatten and linear layer", graph_json: LEVEL_1_GRAPH, solution_graph_json: LEVEL_1_SOLUTION },
-  { level_number: 2, name: "Add activation", description: LEVEL_2_GRAPH.metadata.description!, task: "Add a ReLU activation between the Linear layer and the Output (Input → Flatten → Linear → Activation → Output)", graph_json: LEVEL_2_GRAPH, solution_graph_json: LEVEL_2_SOLUTION },
-  { level_number: 3, name: "Simple CNN", description: LEVEL_3_GRAPH.metadata.description!, task: "Build a small CNN: Input → Conv2D (e.g. 32 filters) → Activation → Flatten → Linear → Output", graph_json: LEVEL_3_GRAPH, solution_graph_json: LEVEL_3_SOLUTION },
-  { level_number: 4, name: "Dropout regularization", description: LEVEL_4_GRAPH.metadata.description!, task: "Add Dropout between Linear and Output (Input → Flatten → Linear → Dropout → Output)", graph_json: LEVEL_4_GRAPH, solution_graph_json: LEVEL_4_SOLUTION },
-  { level_number: 5, name: "LayerNorm and Attention", description: LEVEL_5_GRAPH.metadata.description!, task: "Build a path with LayerNorm then Attention (Input → LayerNorm → Attention → Output). Use 3D input or Embedding first.", graph_json: LEVEL_5_GRAPH, solution_graph_json: LEVEL_5_SOLUTION },
-  { level_number: 6, name: "Residual with Add", description: LEVEL_6_GRAPH.metadata.description!, task: "Build a residual connection: Flatten → Linear(784, 784) and Flatten → Add; Linear → Add; Add → Output. Both Add inputs must be the same shape (784).", graph_json: LEVEL_6_GRAPH, solution_graph_json: LEVEL_6_SOLUTION },
+  { level_number: 1, section: "challenges" as const, name: "Connect input to output", description: LEVEL_1_GRAPH.metadata.description!, task: "Create a feed forward network using the flatten and linear layer", graph_json: LEVEL_1_GRAPH, solution_graph_json: LEVEL_1_SOLUTION },
+  { level_number: 2, section: "challenges" as const, name: "Add activation", description: LEVEL_2_GRAPH.metadata.description!, task: "Add a ReLU activation between the Linear layer and the Output (Input → Flatten → Linear → Activation → Output)", graph_json: LEVEL_2_GRAPH, solution_graph_json: LEVEL_2_SOLUTION },
+  { level_number: 3, section: "challenges" as const, name: "Simple CNN", description: LEVEL_3_GRAPH.metadata.description!, task: "Build a small CNN: Input → Conv2D (e.g. 32 filters) → Activation → Flatten → Linear → Output", graph_json: LEVEL_3_GRAPH, solution_graph_json: LEVEL_3_SOLUTION },
+  { level_number: 4, section: "challenges" as const, name: "Dropout regularization", description: LEVEL_4_GRAPH.metadata.description!, task: "Add Dropout between Linear and Output (Input → Flatten → Linear → Dropout → Output)", graph_json: LEVEL_4_GRAPH, solution_graph_json: LEVEL_4_SOLUTION },
+  { level_number: 5, section: "challenges" as const, name: "LayerNorm and Attention", description: LEVEL_5_GRAPH.metadata.description!, task: "Build a path with LayerNorm then Attention (Input → LayerNorm → Attention → Output). Use 3D input or Embedding first.", graph_json: LEVEL_5_GRAPH, solution_graph_json: LEVEL_5_SOLUTION },
+  { level_number: 6, section: "challenges" as const, name: "Residual with Add", description: LEVEL_6_GRAPH.metadata.description!, task: "Build one residual step: (1) Input → Flatten → Linear(784, 784) → Add. (2) Flatten → Add (skip path). So Add gets two inputs: from Linear and from Flatten. Connect both input ports of the Add block, then Add → Output. Both wires into Add must be shape [B, 784].", graph_json: LEVEL_6_GRAPH, solution_graph_json: LEVEL_6_SOLUTION },
+  {
+    level_number: 7,
+    section: "papers" as const,
+    name: "Attention is All You Need (Vaswani et al.)",
+    description: TRANSFORMER_PAPER_GRAPH.metadata.description!,
+    task: [
+      "Vaswani et al., NeurIPS 2017. The Transformer relies entirely on self-attention without recurrence or convolution.",
+      "• Scaled Dot-Product Attention: Attention(Q,K,V) = softmax(QK^T / √d_k)V",
+      "• Multi-Head Attention runs h attention heads in parallel (d_model = h × d_k); this model uses 4 heads, d_model=128.",
+      "• Each encoder layer has two sublayers: (1) Multi-Head Self-Attention + residual & LayerNorm, (2) Position-wise FFN (two linear layers with ReLU) + residual & LayerNorm.",
+      "• Input embeddings are combined with positional encodings (here: learned Positional Embedding); then stacked encoder layers produce the representation.",
+    ].join("\n"),
+    graph_json: TRANSFORMER_PAPER_GRAPH,
+    solution_graph_json: TRANSFORMER_PAPER_GRAPH,
+  },
 ];
 
 async function main() {

@@ -167,6 +167,13 @@ function computeBlockShape(
       return { outputShape: ["B", 1, 28, 28] };
     }
 
+    // ----- TextInput -----
+    case "TextInput": {
+      const batch = intParam(params, "batch_size", 1);
+      const seqLen = intParam(params, "seq_len", 128);
+      return { outputShape: [batch, seqLen] };
+    }
+
     // ----- Linear -----
     case "Linear": {
       if (!inputShape) return { outputShape: null, error: "No input connected." };
@@ -340,6 +347,51 @@ function computeBlockShape(
       }
       const embedDim = intParam(params, "embedding_dim", 128);
       return { outputShape: [inputShape[0], inputShape[1], embedDim] };
+    }
+
+    // ----- TextEmbedding (same as Embedding; embedding_dim aligns with d_model downstream) -----
+    case "TextEmbedding": {
+      if (!inputShape) return { outputShape: null, error: "No input connected." };
+      if (inputShape.length !== 2) {
+        return {
+          outputShape: null,
+          error: `Text Embedding expects 2D input [batch, seq_len] but got ${inputShape.length}D ${getShapeLabel(inputShape)}. Connect Text Input.`,
+        };
+      }
+      const embedDim = intParam(params, "embedding_dim", 128);
+      return { outputShape: [inputShape[0], inputShape[1], embedDim] };
+    }
+
+    // ----- PositionalEncoding (passthrough shape; adds sinusoidal encoding) -----
+    case "PositionalEncoding": {
+      if (!inputShape) return { outputShape: null, error: "No input connected." };
+      if (inputShape.length !== 3) {
+        return {
+          outputShape: null,
+          error: `PositionalEncoding expects 3D input [batch, seq, d_model] but got ${inputShape.length}D ${getShapeLabel(inputShape)}.`,
+        };
+      }
+      return { outputShape: [...inputShape] };
+    }
+
+    // ----- PositionalEmbedding (passthrough shape; add learned positions; d_model must match upstream) -----
+    case "PositionalEmbedding": {
+      if (!inputShape) return { outputShape: null, error: "No input connected." };
+      if (inputShape.length !== 3) {
+        return {
+          outputShape: null,
+          error: `Positional Embedding expects 3D input [batch, seq, d_model] but got ${inputShape.length}D ${getShapeLabel(inputShape)}. Use after Text Embedding.`,
+        };
+      }
+      const dModel = intParam(params, "d_model", 128);
+      const lastDim = inputShape[2];
+      if (typeof lastDim === "number" && lastDim !== dModel) {
+        return {
+          outputShape: null,
+          error: `Positional Embedding d_model is ${dModel} but input last dim is ${lastDim}. Set d_model to ${lastDim} to match Text Embedding.`,
+        };
+      }
+      return { outputShape: [...inputShape] };
     }
 
     // ----- Add (element-wise sum; both inputs must have same shape) -----
@@ -598,6 +650,36 @@ export function validateConnection(
       return { valid: true };
     }
 
+    case "TextEmbedding": {
+      if (dims !== 2) {
+        return {
+          valid: false,
+          error: `Text Embedding expects 2D input [batch, seq_len] but got ${dims}D ${getShapeLabel(sourceShape)}. Connect from Text Input.`,
+        };
+      }
+      return { valid: true };
+    }
+
+    case "PositionalEncoding": {
+      if (dims !== 3) {
+        return {
+          valid: false,
+          error: `PositionalEncoding expects 3D input [batch, seq, d_model] but got ${dims}D ${getShapeLabel(sourceShape)}.`,
+        };
+      }
+      return { valid: true };
+    }
+
+    case "PositionalEmbedding": {
+      if (dims !== 3) {
+        return {
+          valid: false,
+          error: `Positional Embedding expects 3D input [batch, seq, d_model] but got ${dims}D ${getShapeLabel(sourceShape)}. Connect from Text Embedding.`,
+        };
+      }
+      return { valid: true };
+    }
+
     case "Flatten": {
       if (dims < 2) {
         return {
@@ -643,6 +725,7 @@ export function validateConnection(
     case "Dropout":
     case "Softmax":
     case "Input":
+    case "TextInput":
       return { valid: true };
 
     // Output accepts any shape.

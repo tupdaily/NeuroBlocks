@@ -37,6 +37,7 @@ export interface BlockPort {
 /** All neural-network block types NeuralCanvas supports. */
 export type BlockType =
   | "Input"
+  | "TextInput"
   | "Output"
   | "Linear"
   | "Conv2D"
@@ -48,6 +49,9 @@ export type BlockType =
   | "Dropout"
   | "Flatten"
   | "Embedding"
+  | "TextEmbedding"
+  | "PositionalEncoding"
+  | "PositionalEmbedding"
   | "Softmax"
   | "Add"
   | "Concat";
@@ -106,6 +110,23 @@ const INPUT_BLOCK: BlockDefinition = {
   outputPorts: [{ id: "out", label: "Output" }],
   color: CATEGORY_COLORS.input,
   description: "Model input. Choose dataset in the Training panel.",
+};
+
+const TEXT_INPUT_BLOCK: BlockDefinition = {
+  id: "TextInput",
+  type: "TextInput",
+  label: "Text Input",
+  icon: "type",
+  category: "input",
+  defaultParams: { batch_size: 1, seq_len: 128 },
+  paramSchema: [
+    { name: "batch_size", type: "int", min: 1, max: 65536 },
+    { name: "seq_len", type: "int", min: 1, max: 65536 },
+  ],
+  inputPorts: [],
+  outputPorts: [{ id: "out", label: "Output", expectedDims: 2 }],
+  color: CATEGORY_COLORS.input,
+  description: "Token IDs input for text/sequence models. Output shape [batch, seq_len]. Use with Text Embedding.",
 };
 
 const OUTPUT_BLOCK: BlockDefinition = {
@@ -302,6 +323,57 @@ const EMBEDDING_BLOCK: BlockDefinition = {
   description: "Maps integer token IDs to dense embedding vectors.",
 };
 
+const TEXT_EMBEDDING_BLOCK: BlockDefinition = {
+  id: "TextEmbedding",
+  type: "TextEmbedding",
+  label: "Text Embedding",
+  icon: "type",
+  category: "layer",
+  defaultParams: { vocab_size: 10000, embedding_dim: 128 },
+  paramSchema: [
+    { name: "vocab_size", type: "int", min: 1, max: 1000000 },
+    { name: "embedding_dim", type: "int", min: 1, max: 8192 },
+  ],
+  inputPorts: [{ id: "in", label: "Input", expectedDims: 2 }],
+  outputPorts: [{ id: "out", label: "Output" }],
+  color: CATEGORY_COLORS.layer,
+  description: "Token embeddings for text. Input [B, seq_len] → Output [B, seq_len, embedding_dim]. Pair with Text Input and Positional Embedding (d_model = embedding_dim).",
+};
+
+const POSITIONAL_ENCODING_BLOCK: BlockDefinition = {
+  id: "PositionalEncoding",
+  type: "PositionalEncoding",
+  label: "Positional Encoding",
+  icon: "map-pin",
+  category: "layer",
+  defaultParams: { d_model: 128, max_len: 512 },
+  paramSchema: [
+    { name: "d_model", type: "int", min: 1, max: 8192 },
+    { name: "max_len", type: "int", min: 1, max: 65536 },
+  ],
+  inputPorts: [{ id: "in", label: "Input", expectedDims: 3 }],
+  outputPorts: [{ id: "out", label: "Output" }],
+  color: CATEGORY_COLORS.layer,
+  description: "Adds sinusoidal positional encodings to sequences (Transformer-style). Input [B, seq, d_model].",
+};
+
+const POSITIONAL_EMBEDDING_BLOCK: BlockDefinition = {
+  id: "PositionalEmbedding",
+  type: "PositionalEmbedding",
+  label: "Positional Embedding",
+  icon: "map-pin",
+  category: "layer",
+  defaultParams: { d_model: 128, max_len: 512 },
+  paramSchema: [
+    { name: "d_model", type: "int", min: 1, max: 8192 },
+    { name: "max_len", type: "int", min: 1, max: 65536 },
+  ],
+  inputPorts: [{ id: "in", label: "Input", expectedDims: 3 }],
+  outputPorts: [{ id: "out", label: "Output" }],
+  color: CATEGORY_COLORS.layer,
+  description: "Adds learned positional embeddings to sequences. Input [B, seq, d_model]. Set d_model to match Text Embedding embedding_dim.",
+};
+
 const SOFTMAX_BLOCK: BlockDefinition = {
   id: "Softmax",
   type: "Softmax",
@@ -364,6 +436,7 @@ const CONCAT_BLOCK: BlockDefinition = {
  */
 export const BLOCK_REGISTRY: Record<BlockType, BlockDefinition> = {
   Input: INPUT_BLOCK,
+  TextInput: TEXT_INPUT_BLOCK,
   Output: OUTPUT_BLOCK,
   Linear: LINEAR_BLOCK,
   Conv2D: CONV2D_BLOCK,
@@ -375,6 +448,9 @@ export const BLOCK_REGISTRY: Record<BlockType, BlockDefinition> = {
   Dropout: DROPOUT_BLOCK,
   Flatten: FLATTEN_BLOCK,
   Embedding: EMBEDDING_BLOCK,
+  TextEmbedding: TEXT_EMBEDDING_BLOCK,
+  PositionalEncoding: POSITIONAL_ENCODING_BLOCK,
+  PositionalEmbedding: POSITIONAL_EMBEDDING_BLOCK,
   Softmax: SOFTMAX_BLOCK,
   Add: ADD_BLOCK,
   Concat: CONCAT_BLOCK,

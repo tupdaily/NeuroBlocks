@@ -5,29 +5,45 @@ import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { listPlaygrounds } from "@/lib/supabase/playgrounds";
+import { Trash2 } from "lucide-react";
+import { listPlaygrounds, deletePlayground } from "@/lib/supabase/playgrounds";
 import { listLevels } from "@/lib/supabase/levels";
 import { getCompletedLevelNumbers } from "@/lib/supabase/levelCompletions";
 import type { PlaygroundRow } from "@/types/playground";
 import type { LevelRow } from "@/types/level";
 
-type TabId = "playground" | "challenges";
+type TabId = "playground" | "challenges" | "papers";
 
 export function HomeDashboard({ user }: { user: User }) {
   const supabase = createClient();
   const searchParams = useSearchParams();
-  const [activeTab, setActiveTab] = useState<TabId>(
-    () => (searchParams.get("tab") === "challenges" ? "challenges" : "playground")
-  );
+  const [activeTab, setActiveTab] = useState<TabId>(() => {
+    const tab = searchParams.get("tab");
+    if (tab === "challenges") return "challenges";
+    if (tab === "papers") return "papers";
+    return "playground";
+  });
   const [playgrounds, setPlaygrounds] = useState<PlaygroundRow[]>([]);
   const [levels, setLevels] = useState<LevelRow[]>([]);
   const [completedLevels, setCompletedLevels] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
   const [levelsLoading, setLevelsLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleDeletePlayground = async (e: React.MouseEvent, id: string, name: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!window.confirm(`Delete "${name}"? This cannot be undone.`)) return;
+    setDeletingId(id);
+    const ok = await deletePlayground(id);
+    setDeletingId(null);
+    if (ok) setPlaygrounds((prev) => prev.filter((p) => p.id !== id));
+  };
 
   useEffect(() => {
     const tab = searchParams.get("tab");
     if (tab === "challenges") setActiveTab("challenges");
+    else if (tab === "papers") setActiveTab("papers");
   }, [searchParams]);
 
   useEffect(() => {
@@ -38,7 +54,7 @@ export function HomeDashboard({ user }: { user: User }) {
   }, []);
 
   useEffect(() => {
-    if (activeTab !== "challenges") return;
+    if (activeTab !== "challenges" && activeTab !== "papers") return;
     setLevelsLoading(true);
     Promise.all([listLevels(), getCompletedLevelNumbers()]).then(([list, completed]) => {
       setLevels(list);
@@ -97,7 +113,9 @@ export function HomeDashboard({ user }: { user: User }) {
             <p className="mt-1 text-[var(--foreground-muted)]">
               {activeTab === "playground"
                 ? "Build and run visual workflows in your playgrounds."
-                : "Practice with guided challenges and level up your skills."}
+                : activeTab === "challenges"
+                  ? "Practice with guided challenges and level up your skills."
+                  : "Papers and references."}
             </p>
 
             <nav
@@ -127,6 +145,18 @@ export function HomeDashboard({ user }: { user: User }) {
               >
                 <ChallengesIcon className="h-4 w-4" />
                 Challenges
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("papers")}
+                className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition ${
+                  activeTab === "papers"
+                    ? "bg-[var(--surface)] text-[var(--foreground)] shadow-sm"
+                    : "text-[var(--foreground-muted)] hover:text-[var(--foreground)]"
+                }`}
+              >
+                <PapersIcon className="h-4 w-4" />
+                Papers
               </button>
             </nav>
           </div>
@@ -165,21 +195,34 @@ export function HomeDashboard({ user }: { user: User }) {
                     ))
                   ) : (
                     playgrounds.map((pg) => (
-                      <Link
+                      <div
                         key={pg.id}
-                        href={`/playground/${pg.id}`}
-                        className="group rounded-2xl border border-[var(--border)] bg-[var(--surface)] min-h-[160px] p-5 flex flex-col transition hover:border-[var(--border)] hover:bg-[var(--surface-elevated)] hover:shadow-[var(--glow)]"
+                        className="group relative rounded-2xl border border-[var(--border)] bg-[var(--surface)] min-h-[160px] p-5 flex flex-col transition hover:border-[var(--border)] hover:bg-[var(--surface-elevated)] hover:shadow-[var(--glow)]"
                       >
-                        <span className="mb-3 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-muted)] text-[var(--accent)] transition group-hover:bg-[var(--accent)]/20">
-                          <PlaygroundIcon className="h-5 w-5" />
-                        </span>
-                        <h3 className="font-medium text-[var(--foreground)] truncate mb-0.5">
-                          {pg.name}
-                        </h3>
-                        <p className="mt-auto text-xs text-[var(--foreground-muted)]">
-                          Updated {formatDate(pg.updated_at)}
-                        </p>
-                      </Link>
+                        <Link
+                          href={`/playground/${pg.id}`}
+                          className="absolute inset-0 flex flex-col p-5 rounded-2xl"
+                        >
+                          <span className="mb-3 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-muted)] text-[var(--accent)] transition group-hover:bg-[var(--accent)]/20">
+                            <PlaygroundIcon className="h-5 w-5" />
+                          </span>
+                          <h3 className="font-medium text-[var(--foreground)] truncate mb-0.5">
+                            {pg.name}
+                          </h3>
+                          <p className="mt-auto text-xs text-[var(--foreground-muted)]">
+                            Updated {formatDate(pg.updated_at)}
+                          </p>
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={(e) => handleDeletePlayground(e, pg.id, pg.name)}
+                          disabled={deletingId === pg.id}
+                          className="absolute top-3 right-3 z-10 p-1.5 rounded-lg text-[var(--foreground-muted)] hover:text-red-500 hover:bg-red-500/10 transition opacity-0 group-hover:opacity-100 focus:opacity-100 disabled:opacity-50"
+                          aria-label={`Delete ${pg.name}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     ))
                   )}
                 </div>
@@ -217,21 +260,23 @@ export function HomeDashboard({ user }: { user: User }) {
                         </div>
                       ))}
                     </div>
-                  ) : levels.length === 0 ? (
-                    <div className="flex min-h-[240px] flex-col items-center justify-center gap-4 py-12 text-center">
-                      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--surface-elevated)] text-[var(--foreground-muted)]">
-                        <ChallengesIcon className="h-8 w-8" />
+                  ) : (() => {
+                    const challengeLevels = levels.filter((l) => (l.section ?? "challenges") === "challenges");
+                    return challengeLevels.length === 0 ? (
+                      <div className="flex min-h-[240px] flex-col items-center justify-center gap-4 py-12 text-center">
+                        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--surface-elevated)] text-[var(--foreground-muted)]">
+                          <ChallengesIcon className="h-8 w-8" />
+                        </div>
+                        <p className="font-medium text-[var(--foreground)]">
+                          No challenges yet
+                        </p>
+                        <p className="max-w-sm text-sm text-[var(--foreground-muted)]">
+                          We&apos;re preparing challenges for you. Check back soon.
+                        </p>
                       </div>
-                      <p className="font-medium text-[var(--foreground)]">
-                        No challenges yet
-                      </p>
-                      <p className="max-w-sm text-sm text-[var(--foreground-muted)]">
-                        We&apos;re preparing challenges for you. Check back soon.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
-                      {levels.map((level) => {
+                    ) : (
+                      <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
+                        {challengeLevels.map((level) => {
                         const completed = completedLevels.has(level.level_number);
                         return (
                           <Link
@@ -267,9 +312,101 @@ export function HomeDashboard({ user }: { user: User }) {
                             </span>
                           </Link>
                         );
-                      })}
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
+              </section>
+            )}
+
+            {activeTab === "papers" && (
+              <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
+                <div className="border-b border-[var(--border)] bg-[var(--surface-elevated)]/50 px-6 py-4">
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-muted)] text-[var(--accent)]">
+                      <PapersIcon className="h-5 w-5" />
+                    </span>
+                    <div>
+                      <h2 className="text-base font-semibold text-[var(--foreground)]">
+                        Papers
+                      </h2>
+                      <p className="text-sm text-[var(--foreground-muted)]">
+                        Design architectures from classic papers.
+                      </p>
                     </div>
-                  )}
+                  </div>
+                </div>
+                <div className="p-6">
+                  {levelsLoading ? (
+                    <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
+                      {[...Array(2)].map((_, i) => (
+                        <div
+                          key={i}
+                          className="rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] min-h-[140px] p-5 animate-pulse"
+                        >
+                          <div className="mb-3 h-10 w-10 rounded-xl bg-[var(--border-muted)]" />
+                          <div className="mb-2 h-4 rounded bg-[var(--border-muted)] w-3/4" />
+                          <div className="h-3 rounded bg-[var(--border-muted)] w-full" />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (() => {
+                    const paperLevels = levels.filter((l) => (l.section ?? "challenges") === "papers");
+                    return paperLevels.length === 0 ? (
+                      <div className="flex min-h-[280px] flex-col items-center justify-center gap-4 py-16 text-center">
+                        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--surface-elevated)] text-[var(--foreground-muted)]">
+                          <PapersIcon className="h-8 w-8" />
+                        </div>
+                        <p className="font-medium text-[var(--foreground)]">
+                          No papers yet
+                        </p>
+                        <p className="max-w-sm text-sm text-[var(--foreground-muted)]">
+                          Paper-based design tasks will appear here.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
+                        {paperLevels.map((level) => {
+                          const completed = completedLevels.has(level.level_number);
+                          return (
+                            <Link
+                              key={level.id}
+                              href={`/playground?level=${level.level_number}`}
+                              className="group rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] min-h-[140px] p-5 flex flex-col transition hover:border-amber-500/50 hover:bg-[var(--surface)] hover:shadow-[var(--glow)]"
+                            >
+                              <span className="mb-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-muted)] text-[var(--accent)] transition group-hover:bg-[var(--accent-muted)]/80">
+                                {completed ? (
+                                  <CheckIcon className="h-5 w-5 text-emerald-500" />
+                                ) : (
+                                  <PapersIcon className="h-5 w-5" />
+                                )}
+                              </span>
+                              <span className="text-xs font-medium text-[var(--foreground-muted)]">
+                                Paper
+                                {completed && (
+                                  <span className="ml-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
+                                    · Completed
+                                  </span>
+                                )}
+                              </span>
+                              <h3 className="font-medium text-[var(--foreground)] mt-0.5 truncate">
+                                {level.name}
+                              </h3>
+                              {level.description && (
+                                <p className="mt-2 text-sm text-[var(--foreground-muted)] line-clamp-2">
+                                  {level.description}
+                                </p>
+                              )}
+                              <span className="mt-auto pt-3 text-sm text-amber-600 dark:text-amber-400 font-medium opacity-0 group-hover:opacity-100 transition">
+                                {completed ? "Play again →" : "Design →"}
+                              </span>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                 </div>
               </section>
             )}
@@ -340,6 +477,25 @@ function CheckIcon({ className }: { className?: string }) {
         strokeLinejoin="round"
         strokeWidth={2}
         d="M5 13l4 4L19 7"
+      />
+    </svg>
+  );
+}
+
+function PapersIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className ?? "h-5 w-5"}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+      aria-hidden
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
       />
     </svg>
   );

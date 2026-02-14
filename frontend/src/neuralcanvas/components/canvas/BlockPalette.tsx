@@ -13,6 +13,7 @@ import {
 import {
   Inbox,
   Target,
+  Type,
   Rows3,
   Grid3X3,
   RefreshCw,
@@ -23,6 +24,7 @@ import {
   Shuffle,
   FoldHorizontal,
   Hash,
+  MapPin,
   Percent,
   Search,
   PanelLeftClose,
@@ -41,6 +43,7 @@ import {
 const ICON_MAP: Record<string, LucideIcon> = {
   inbox: Inbox,
   target: Target,
+  type: Type,
   "rows-3": Rows3,
   "grid-3x3": Grid3X3,
   "refresh-cw": RefreshCw,
@@ -51,6 +54,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   shuffle: Shuffle,
   "fold-horizontal": FoldHorizontal,
   hash: Hash,
+  "map-pin": MapPin,
   percent: Percent,
 };
 
