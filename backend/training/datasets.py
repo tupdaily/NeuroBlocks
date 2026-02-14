@@ -13,18 +13,24 @@ BUILTIN_DATASETS = {
         "description": "Handwritten digits, 28x28 grayscale",
         "input_shape": (1, 28, 28),
         "num_classes": 10,
+        "data_modality": "image",
+        "dataset_size": 60000,
     },
     "fashion_mnist": {
         "name": "Fashion-MNIST",
         "description": "Clothing items, 28x28 grayscale",
         "input_shape": (1, 28, 28),
         "num_classes": 10,
+        "data_modality": "image",
+        "dataset_size": 60000,
     },
     "cifar10": {
         "name": "CIFAR-10",
         "description": "32x32 color images, 10 classes",
         "input_shape": (3, 32, 32),
         "num_classes": 10,
+        "data_modality": "image",
+        "dataset_size": 50000,
     },
 }
 
