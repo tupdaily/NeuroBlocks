@@ -1,0 +1,24 @@
+# Virtual environments (use .venv or venv only)
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Avoid accidental venvs from typos (e.g. "python -m venv that's what" creating multiple folders)
+what
+you
+have
+if
+or
+python3.12
+
+# Local data
+data/
+*.db
