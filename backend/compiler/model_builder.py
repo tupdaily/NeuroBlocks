@@ -153,6 +153,33 @@ def build_model(graph: GraphSchema, input_shape: tuple[int, ...] | None = None) 
     """Build a PyTorch model from a graph schema."""
     shapes = infer_shapes(graph, input_shape)
     model = DynamicModel(graph, shapes)
+
+    # Print compiled model summary to console
+    print("\n" + "=" * 60)
+    print("COMPILED MODEL")
+    print("=" * 60)
+
+    topo = topological_sort(graph)
+    nodes_by_id = {n.id: n for n in graph.nodes}
+
+    print("\nExecution order:")
+    print(model)
+
+    total = count_parameters(model)
+    print(f"\nTotal trainable parameters: {total:,}")
+
+    # Dry-run forward pass to verify
+    if input_shape:
+        try:
+            x = torch.randn(1, *input_shape)
+            with torch.no_grad():
+                y = model(x)
+            print(f"Forward pass OK: {list(x.shape)} -> {list(y.shape)}")
+        except Exception as e:
+            print(f"Forward pass FAILED: {e}")
+
+    print("=" * 60 + "\n")
+
     return model
 
 
