@@ -41,6 +41,15 @@ import { ConnectionWire } from "./ConnectionWire";
 import { BlockPalette, DRAG_BLOCK_TYPE } from "./BlockPalette";
 import { useUndoRedo } from "@/hooks/useUndoRedo";
 import {
+  PeepInsideProvider,
+  usePeepInsideContext,
+} from "@/components/peep-inside/PeepInsideContext";
+import { PeepInsideModal } from "@/components/peep-inside/PeepInsideModal";
+import {
+  GradientFlowProvider,
+  useGradientFlow,
+} from "@/components/peep-inside/GradientFlowContext";
+import {
   InputBlock,
   LinearBlock,
   Conv2DBlock,
@@ -391,6 +400,9 @@ function CanvasInner() {
         />
       </ReactFlow>
 
+      {/* ── Top-right toolbar ── */}
+      <GradientFlowToggle nodeIds={nodes.map((n) => n.id)} />
+
       {/* ── Keyboard hint bar ── */}
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-3 px-4 py-1.5 rounded-full bg-neural-surface/80 border border-neural-border backdrop-blur text-[10px] text-neutral-500 font-mono select-none pointer-events-none">
         <span>⌫ Delete</span>
@@ -404,7 +416,72 @@ function CanvasInner() {
         <span>Space Pan</span>
       </div>
       </div>
+
+      {/* ── Peep Inside Modal ── */}
+      <PeepInsideOverlay />
     </div>
+  );
+}
+
+// ── Gradient flow toggle button ──
+function GradientFlowToggle({ nodeIds }: { nodeIds: string[] }) {
+  const { enabled, setEnabled, seedDemo, gradients } = useGradientFlow();
+
+  const handleToggle = useCallback(() => {
+    const next = !enabled;
+    setEnabled(next);
+    // Seed demo data if no real gradient data exists yet.
+    if (next && gradients.size === 0 && nodeIds.length > 0) {
+      seedDemo(nodeIds);
+    }
+  }, [enabled, setEnabled, seedDemo, gradients.size, nodeIds]);
+
+  return (
+    <button
+      onClick={handleToggle}
+      className={`
+        absolute top-4 right-4 z-20
+        flex items-center gap-2 px-3 py-1.5 rounded-full
+        border backdrop-blur text-[10px] font-mono font-semibold
+        transition-all duration-200 select-none
+        ${
+          enabled
+            ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 shadow-[0_0_20px_rgba(34,197,94,0.15)]"
+            : "bg-neural-surface/80 border-neural-border text-neutral-500 hover:text-neutral-300 hover:border-neutral-600"
+        }
+      `}
+      title={enabled ? "Hide gradient flow overlay" : "Show gradient flow overlay on canvas"}
+    >
+      <svg
+        width="12"
+        height="12"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+      </svg>
+      {enabled ? "Gradient Flow ON" : "Show Gradient Flow"}
+    </button>
+  );
+}
+
+// ── Renders the modal when a block is being peeped ──
+function PeepInsideOverlay() {
+  const { target, close } = usePeepInsideContext();
+  if (!target) return null;
+  return (
+    <PeepInsideModal
+      blockId={target.blockId}
+      blockType={target.blockType}
+      anchorX={target.anchorX}
+      anchorY={target.anchorY}
+      activationType={target.activationType}
+      onClose={close}
+    />
   );
 }
 
@@ -416,9 +493,13 @@ export default function NeuralCanvas() {
   return (
     <ReactFlowProvider>
       <ShapeProvider>
-        <div className="w-screen h-screen bg-neural-bg">
-          <CanvasInner />
-        </div>
+        <PeepInsideProvider>
+          <GradientFlowProvider>
+            <div className="w-screen h-screen bg-neural-bg">
+              <CanvasInner />
+            </div>
+          </GradientFlowProvider>
+        </PeepInsideProvider>
       </ShapeProvider>
     </ReactFlowProvider>
   );

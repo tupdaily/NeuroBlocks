@@ -32,6 +32,8 @@ import {
 } from "@/lib/blockRegistry";
 import { getShapeLabel } from "@/lib/shapeEngine";
 import { useShapes } from "@/components/canvas/ShapeContext";
+import { usePeepInsideContext } from "@/components/peep-inside/PeepInsideContext";
+import { useGradientFlow, healthToColor } from "@/components/peep-inside/GradientFlowContext";
 import {
   Database,
   ArrowRightLeft,
@@ -262,6 +264,28 @@ function BaseBlockComponent({
   const result = shapes.get(id);
   const { setNodes } = useReactFlow();
   const [errorTooltip, setErrorTooltip] = useState(false);
+  const { open: openPeep } = usePeepInsideContext();
+  const { enabled: gradFlowEnabled, gradients: gradMap } = useGradientFlow();
+  const gradInfo = gradFlowEnabled ? gradMap.get(id) : undefined;
+  const gradGlowColor = gradInfo ? healthToColor(gradInfo.health) : undefined;
+
+  const handlePeepInside = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      openPeep({
+        blockId: id,
+        blockType,
+        anchorX: rect.right,
+        anchorY: rect.top,
+        activationType:
+          blockType === "Activation"
+            ? String(params.activation ?? "")
+            : undefined,
+      });
+    },
+    [id, blockType, params, openPeep],
+  );
 
   const color = def?.color ?? "#6366f1";
   const Icon = def ? ICON_MAP[def.icon] : null;
@@ -307,9 +331,14 @@ function BaseBlockComponent({
         ${hasError ? "ring-red-500/50" : "ring-white/20"}
       `}
       style={{
-        boxShadow: selected
-          ? `0 0 24px ${color}40, 0 8px 32px rgba(0,0,0,0.5)`
-          : `0 4px 20px rgba(0,0,0,0.4), 0 0 12px ${color}15`,
+        boxShadow: gradFlowEnabled && gradGlowColor
+          ? `0 0 ${Math.min(gradInfo!.norm * 60, 30)}px ${gradGlowColor}60, 0 0 ${Math.min(gradInfo!.norm * 120, 50)}px ${gradGlowColor}30, 0 4px 20px rgba(0,0,0,0.4)`
+          : selected
+            ? `0 0 24px ${color}40, 0 8px 32px rgba(0,0,0,0.5)`
+            : `0 4px 20px rgba(0,0,0,0.4), 0 0 12px ${color}15`,
+        ...(gradFlowEnabled && gradGlowColor
+          ? { outline: `2px solid ${gradGlowColor}50`, outlineOffset: -1 }
+          : {}),
       }}
     >
       {/* ── Gradient background ── */}
@@ -363,7 +392,8 @@ function BaseBlockComponent({
               transition-all duration-150
               opacity-0 group-hover/block:opacity-100
             "
-            title="Peep inside (available after training)"
+            title="Peep inside this block"
+            onClick={handlePeepInside}
           >
             <Eye size={11} />
           </button>
