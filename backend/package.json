@@ -1,0 +1,6 @@
+{
+  "name": "ai-playground-backend",
+  "version": "1.0.0",
+  "description": "AI Playground backend API",
+  "private": true
+}

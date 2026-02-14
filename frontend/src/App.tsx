@@ -21,7 +21,7 @@ export default function App() {
         <h1 className="title">AI Playground</h1>
         <p className="subtitle">
           {pendingConnection
-            ? 'Now click another block’s port to connect (output → input or input → output)'
+            ? "Now click another block's port to connect (output → input or input → output)"
             : 'Drag layers into the canvas or click to add • Click output then input to connect'}
         </p>
         <button type="button" className="clearBtn" onClick={clearPlayground}>

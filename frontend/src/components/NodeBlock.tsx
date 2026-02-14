@@ -110,7 +110,7 @@ export function NodeBlock({ block, onDrag, onPortPress, isSelected, pendingConne
               onPortPress(block.id, 'input');
             }}
             onClick={(e) => e.stopPropagation()}
-            title="Input – click to connect from another block’s output"
+            title="Input – click to connect from another block's output"
           />
         )}
       </div>
