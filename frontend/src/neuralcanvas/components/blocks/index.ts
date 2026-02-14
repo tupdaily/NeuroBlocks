@@ -15,3 +15,5 @@ export { DropoutBlock } from "./DropoutBlock";
 export { FlattenBlock } from "./FlattenBlock";
 export { EmbeddingBlock } from "./EmbeddingBlock";
 export { SoftmaxBlock } from "./SoftmaxBlock";
+export { AddBlock } from "./AddBlock";
+export { ConcatBlock } from "./ConcatBlock";

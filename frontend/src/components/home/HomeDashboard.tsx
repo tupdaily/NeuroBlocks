@@ -4,8 +4,10 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { listPlaygrounds } from "@/lib/supabase/playgrounds";
 import { listLevels } from "@/lib/supabase/levels";
+import { getCompletedLevelNumbers } from "@/lib/supabase/levelCompletions";
 import type { PlaygroundRow } from "@/types/playground";
 import type { LevelRow } from "@/types/level";
 
@@ -13,11 +15,20 @@ type TabId = "playground" | "challenges";
 
 export function HomeDashboard({ user }: { user: User }) {
   const supabase = createClient();
-  const [activeTab, setActiveTab] = useState<TabId>("playground");
+  const searchParams = useSearchParams();
+  const [activeTab, setActiveTab] = useState<TabId>(
+    () => (searchParams.get("tab") === "challenges" ? "challenges" : "playground")
+  );
   const [playgrounds, setPlaygrounds] = useState<PlaygroundRow[]>([]);
   const [levels, setLevels] = useState<LevelRow[]>([]);
+  const [completedLevels, setCompletedLevels] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
   const [levelsLoading, setLevelsLoading] = useState(false);
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab === "challenges") setActiveTab("challenges");
+  }, [searchParams]);
 
   useEffect(() => {
     listPlaygrounds().then((list) => {
@@ -29,8 +40,9 @@ export function HomeDashboard({ user }: { user: User }) {
   useEffect(() => {
     if (activeTab !== "challenges") return;
     setLevelsLoading(true);
-    listLevels().then((list) => {
+    Promise.all([listLevels(), getCompletedLevelNumbers()]).then(([list, completed]) => {
       setLevels(list);
+      setCompletedLevels(completed);
       setLevelsLoading(false);
     });
   }, [activeTab]);
@@ -219,31 +231,43 @@ export function HomeDashboard({ user }: { user: User }) {
                     </div>
                   ) : (
                     <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
-                      {levels.map((level) => (
-                        <Link
-                          key={level.id}
-                          href={`/playground?level=${level.level_number}`}
-                          className="group rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] min-h-[140px] p-5 flex flex-col transition hover:border-amber-500/50 hover:bg-[var(--surface)] hover:shadow-[var(--glow)]"
-                        >
-                          <span className="mb-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 text-amber-500 transition group-hover:bg-amber-500/25">
-                            <ChallengesIcon className="h-5 w-5" />
-                          </span>
-                          <span className="text-xs font-medium text-[var(--foreground-muted)]">
-                            Level {level.level_number}
-                          </span>
-                          <h3 className="font-medium text-[var(--foreground)] mt-0.5 truncate">
-                            {level.name}
-                          </h3>
-                          {level.description && (
-                            <p className="mt-2 text-sm text-[var(--foreground-muted)] line-clamp-2">
-                              {level.description}
-                            </p>
-                          )}
-                          <span className="mt-auto pt-3 text-sm text-amber-600 dark:text-amber-400 font-medium opacity-0 group-hover:opacity-100 transition">
-                            Start →
-                          </span>
-                        </Link>
-                      ))}
+                      {levels.map((level) => {
+                        const completed = completedLevels.has(level.level_number);
+                        return (
+                          <Link
+                            key={level.id}
+                            href={`/playground?level=${level.level_number}`}
+                            className="group rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] min-h-[140px] p-5 flex flex-col transition hover:border-amber-500/50 hover:bg-[var(--surface)] hover:shadow-[var(--glow)]"
+                          >
+                            <span className="mb-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 text-amber-500 transition group-hover:bg-amber-500/25">
+                              {completed ? (
+                                <CheckIcon className="h-5 w-5 text-emerald-500" />
+                              ) : (
+                                <ChallengesIcon className="h-5 w-5" />
+                              )}
+                            </span>
+                            <span className="text-xs font-medium text-[var(--foreground-muted)]">
+                              Level {level.level_number}
+                              {completed && (
+                                <span className="ml-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
+                                  · Completed
+                                </span>
+                              )}
+                            </span>
+                            <h3 className="font-medium text-[var(--foreground)] mt-0.5 truncate">
+                              {level.name}
+                            </h3>
+                            {level.description && (
+                              <p className="mt-2 text-sm text-[var(--foreground-muted)] line-clamp-2">
+                                {level.description}
+                              </p>
+                            )}
+                            <span className="mt-auto pt-3 text-sm text-amber-600 dark:text-amber-400 font-medium opacity-0 group-hover:opacity-100 transition">
+                              {completed ? "Play again →" : "Start →"}
+                            </span>
+                          </Link>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -297,6 +321,25 @@ function ChallengesIcon({ className }: { className?: string }) {
         strokeLinejoin="round"
         strokeWidth={2}
         d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"
+      />
+    </svg>
+  );
+}
+
+function CheckIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className ?? "h-5 w-5"}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+      aria-hidden
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M5 13l4 4L19 7"
       />
     </svg>
   );

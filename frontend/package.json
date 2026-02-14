@@ -6,12 +6,14 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "seed-levels": "npx tsx scripts/seed-levels.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.95.3",
     "@xyflow/react": "^12.10.0",
+    "canvas-confetti": "^1.9.4",
     "d3": "^7.9.0",
     "framer-motion": "^12.34.0",
     "lucide-react": "^0.564.0",
@@ -25,6 +27,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/canvas-confetti": "^1.9.0",
     "@types/d3": "^7.4.3",
     "@types/node": "^20",
     "@types/react": "^19",

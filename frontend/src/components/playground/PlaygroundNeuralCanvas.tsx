@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import confetti from "canvas-confetti";
 import { getLevelByNumber } from "@/lib/supabase/levels";
 import { getPlayground } from "@/lib/supabase/playgrounds";
+import { recordLevelCompletion } from "@/lib/supabase/levelCompletions";
 import { levelGraphToNeuralCanvas } from "@/lib/levelGraphAdapter";
+import type { GraphSchema } from "@/types/graph";
 import type { Node, Edge } from "@xyflow/react";
 
 const NeuralCanvas = dynamic(
@@ -20,6 +23,7 @@ export default function PlaygroundNeuralCanvas({
 }: {
   playgroundId?: string;
 } = {}) {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const levelParam = searchParams.get("level");
   const [initialGraph, setInitialGraph] = useState<{
@@ -27,6 +31,8 @@ export default function PlaygroundNeuralCanvas({
     edges: Edge[];
   } | null>(null);
   const [playgroundName, setPlaygroundName] = useState<string | undefined>();
+  const [challengeTask, setChallengeTask] = useState<string | null>(null);
+  const [challengeSolution, setChallengeSolution] = useState<GraphSchema | null>(null);
   const [loading, setLoading] = useState(!!levelParam || !!playgroundId);
   const [error, setError] = useState<string | null>(null);
 
@@ -58,6 +64,8 @@ export default function PlaygroundNeuralCanvas({
       setLoading(false);
       setError(null);
       setPlaygroundName(undefined);
+      setChallengeTask(null);
+      setChallengeSolution(null);
       return;
     }
     const levelNum = Number(levelParam);
@@ -74,17 +82,46 @@ export default function PlaygroundNeuralCanvas({
         if (level?.graph_json) {
           const { nodes, edges } = levelGraphToNeuralCanvas(level.graph_json);
           setInitialGraph({ nodes, edges });
+          // Use task from DB, or fallback for level 1 if not yet seeded
+          const task =
+            level.task?.trim() ||
+            (levelNum === 1
+              ? "Create a feed forward network using the flatten and linear layer"
+              : null);
+          setChallengeTask(task || null);
+          setChallengeSolution(level.solution_graph_json ?? null);
         } else {
           setInitialGraph(null);
+          setChallengeTask(null);
+          setChallengeSolution(null);
           setError("Level not found");
         }
       })
       .catch(() => {
         setInitialGraph(null);
+        setChallengeTask(null);
+        setChallengeSolution(null);
         setError("Failed to load challenge");
       })
       .finally(() => setLoading(false));
   }, [levelParam, playgroundId]);
+
+  const levelNum = levelParam ? parseInt(levelParam, 10) : 0;
+  const challengeLevelNumber = levelNum >= 1 ? levelNum : null;
+  const handleChallengeSuccess = useCallback(
+    async (levelNumber: number) => {
+      await recordLevelCompletion(levelNumber);
+      confetti({
+        particleCount: 120,
+        spread: 100,
+        origin: { y: 0.6 },
+      });
+      setTimeout(() => {
+        router.push("/?tab=challenges");
+      }, 1500);
+    },
+    [router]
+  );
 
   if (loading) {
     return (
@@ -148,6 +185,10 @@ export default function PlaygroundNeuralCanvas({
           initialEdges={initialEdges}
           playgroundId={playgroundId}
           playgroundName={playgroundName}
+          challengeTask={challengeTask}
+          challengeSolutionGraph={challengeSolution}
+          challengeLevelNumber={challengeLevelNumber}
+          onChallengeSuccess={handleChallengeSuccess}
         />
       </div>
     </div>

@@ -48,7 +48,9 @@ export type BlockType =
   | "Dropout"
   | "Flatten"
   | "Embedding"
-  | "Softmax";
+  | "Softmax"
+  | "Add"
+  | "Concat";
 
 /** Full definition for a single block type. */
 export interface BlockDefinition {
@@ -316,6 +318,42 @@ const SOFTMAX_BLOCK: BlockDefinition = {
   description: "Normalises logits into a probability distribution along a dimension.",
 };
 
+const ADD_BLOCK: BlockDefinition = {
+  id: "Add",
+  type: "Add",
+  label: "Add",
+  icon: "plus",
+  category: "utility",
+  defaultParams: {},
+  paramSchema: [],
+  inputPorts: [
+    { id: "in_a", label: "A" },
+    { id: "in_b", label: "B" },
+  ],
+  outputPorts: [{ id: "out", label: "Output" }],
+  color: CATEGORY_COLORS.utility,
+  description: "Element-wise sum of two tensors (e.g. residual connection). Both inputs must have the same shape.",
+};
+
+const CONCAT_BLOCK: BlockDefinition = {
+  id: "Concat",
+  type: "Concat",
+  label: "Concat",
+  icon: "merge",
+  category: "utility",
+  defaultParams: { dim: 1 },
+  paramSchema: [
+    { name: "dim", type: "int", min: 0, max: 4 },
+  ],
+  inputPorts: [
+    { id: "in_a", label: "A" },
+    { id: "in_b", label: "B" },
+  ],
+  outputPorts: [{ id: "out", label: "Output" }],
+  color: CATEGORY_COLORS.utility,
+  description: "Concatenates two or more tensors along the given dimension.",
+};
+
 // ---------------------------------------------------------------------------
 // Registry map
 // ---------------------------------------------------------------------------
@@ -338,6 +376,8 @@ export const BLOCK_REGISTRY: Record<BlockType, BlockDefinition> = {
   Flatten: FLATTEN_BLOCK,
   Embedding: EMBEDDING_BLOCK,
   Softmax: SOFTMAX_BLOCK,
+  Add: ADD_BLOCK,
+  Concat: CONCAT_BLOCK,
 };
 
 // ---------------------------------------------------------------------------

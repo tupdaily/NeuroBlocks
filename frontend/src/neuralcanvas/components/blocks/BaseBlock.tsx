@@ -49,6 +49,8 @@ import {
   FoldHorizontal,
   Hash,
   Percent,
+  Plus,
+  Combine,
   Eye,
   AlertCircle,
   ChevronUp,
@@ -77,6 +79,8 @@ export const ICON_MAP: Record<string, LucideIcon> = {
   "fold-horizontal": FoldHorizontal,
   hash: Hash,
   percent: Percent,
+  plus: Plus,
+  merge: Combine,
 };
 
 // ---------------------------------------------------------------------------

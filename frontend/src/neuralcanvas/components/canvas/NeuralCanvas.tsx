@@ -29,6 +29,7 @@ import {
   type NodeTypes,
   type EdgeTypes,
   type OnConnect,
+  type NodeProps,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
@@ -52,7 +53,8 @@ import {
   GradientFlowProvider,
   useGradientFlow,
 } from "@/neuralcanvas/components/peep-inside/GradientFlowContext";
-import { neuralCanvasToGraphSchema } from "@/lib/levelGraphAdapter";
+import { neuralCanvasToGraphSchema, graphsMatchStructurally } from "@/lib/levelGraphAdapter";
+import type { GraphSchema } from "@/types/graph";
 import { createPlayground, updatePlayground, getPlayground } from "@/lib/supabase/playgrounds";
 import { insertChatMessage, getChatHistory } from "@/lib/supabase/userHistories";
 import { getApiBase } from "@/neuralcanvas/lib/trainingApi";
@@ -71,11 +73,30 @@ import {
   FlattenBlock,
   EmbeddingBlock,
   SoftmaxBlock,
+  AddBlock,
+  ConcatBlock,
 } from "@/neuralcanvas/components/blocks";
 
 // ---------------------------------------------------------------------------
 // Register one node type per block → specific block components
 // ---------------------------------------------------------------------------
+
+// Task label shown on canvas for challenges; scales with zoom, coverable by other nodes
+const CHALLENGE_TASK_NODE_TYPE = "challengeTask";
+
+function ChallengeTaskNode({ data }: NodeProps<{ task?: string }>) {
+  const task = data?.task?.trim();
+  if (!task) return null;
+  return (
+    <div
+      className="text-white font-medium select-none max-w-[280px] leading-tight"
+      style={{ fontSize: 11, pointerEvents: "none" }}
+      aria-label={`Challenge task: ${task}`}
+    >
+      Task: {task}
+    </div>
+  );
+}
 
 const nodeTypes: NodeTypes = {
   Input: InputBlock,
@@ -91,6 +112,9 @@ const nodeTypes: NodeTypes = {
   Flatten: FlattenBlock,
   Embedding: EmbeddingBlock,
   Softmax: SoftmaxBlock,
+  Add: AddBlock,
+  Concat: ConcatBlock,
+  [CHALLENGE_TASK_NODE_TYPE]: ChallengeTaskNode,
 };
 
 const edgeTypes: EdgeTypes = {
@@ -162,11 +186,17 @@ function CanvasInner({
   initialEdges,
   playgroundId,
   playgroundName,
+  challengeSolutionGraph,
+  challengeLevelNumber,
+  onChallengeSuccess,
 }: {
   initialNodes?: Node[];
   initialEdges?: Edge[];
   playgroundId?: string;
   playgroundName?: string;
+  challengeSolutionGraph?: GraphSchema | null;
+  challengeLevelNumber?: number | null;
+  onChallengeSuccess?: (levelNumber: number) => void;
 }) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes ?? INITIAL_NODES);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges ?? INITIAL_EDGES);
@@ -178,6 +208,7 @@ function CanvasInner({
   const idCounter = useRef(100);
   const reactFlowInstance = useReactFlow();
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [submitResult, setSubmitResult] = useState<"idle" | "correct" | "wrong">("idle");
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [feedbackMessages, setFeedbackMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
   const [feedbackChatOpen, setFeedbackChatOpen] = useState(false);
@@ -236,6 +267,38 @@ function CanvasInner({
   useEffect(() => {
     recompute(nodes, edges);
   }, [nodes, edges, recompute]);
+
+  // ── Sync edge validation with current shapes and params (fixes stale error after user adjusts in_features etc.) ──
+  useEffect(() => {
+    setEdges((currentEdges) => {
+      let changed = false;
+      const next = currentEdges.map((edge) => {
+        const sourceNode = nodes.find((n) => n.id === edge.source);
+        const targetNode = nodes.find((n) => n.id === edge.target);
+        if (!sourceNode || !targetNode) return edge;
+        const sourceShape = shapes.get(edge.source)?.outputShape ?? null;
+        const validation = validateConnection(
+          {
+            id: sourceNode.id,
+            type: sourceNode.type ?? "Input",
+            data: { params: (sourceNode.data?.params ?? {}) as Record<string, string | number> },
+          },
+          {
+            id: targetNode.id,
+            type: targetNode.type ?? "Input",
+            data: { params: (targetNode.data?.params ?? {}) as Record<string, string | number> },
+          },
+          sourceShape,
+        );
+        const newError = validation.valid ? undefined : (validation.error ?? undefined);
+        const prevError = (edge.data?.error as string) || undefined;
+        if (prevError === newError) return edge;
+        changed = true;
+        return { ...edge, data: validation.valid ? {} : { error: validation.error } };
+      });
+      return changed ? next : currentEdges;
+    });
+  }, [nodes, shapes, setEdges]);
 
   // ── Connection handler with validation ──
   const onConnect: OnConnect = useCallback(
@@ -320,7 +383,11 @@ function CanvasInner({
       } else if (playgroundName) {
         metadata = { name: playgroundName };
       }
-      const graph = neuralCanvasToGraphSchema(nodes, edges, metadata);
+      const graph = neuralCanvasToGraphSchema(
+        nodes.filter((n) => n.type !== CHALLENGE_TASK_NODE_TYPE),
+        edges,
+        metadata
+      );
       if (playgroundId) {
         const ok = await updatePlayground(
           playgroundId,
@@ -344,6 +411,28 @@ function CanvasInner({
     }
   }, [nodes, edges, playgroundId, playgroundName, router]);
 
+  // ── Submit challenge (compare current graph to solution) ──
+  const handleSubmitChallenge = useCallback(() => {
+    if (!challengeSolutionGraph) return;
+    const currentGraph = neuralCanvasToGraphSchema(
+      nodes.filter((n) => n.type !== CHALLENGE_TASK_NODE_TYPE),
+      edges,
+      { name: "", created_at: "" }
+    );
+    const match = graphsMatchStructurally(currentGraph, challengeSolutionGraph);
+    setSubmitResult(match ? "correct" : "wrong");
+    if (match && challengeLevelNumber != null && onChallengeSuccess) {
+      onChallengeSuccess(challengeLevelNumber);
+    } else if (match) {
+      setTimeout(() => setSubmitResult("idle"), 3000);
+    }
+  }, [nodes, edges, challengeSolutionGraph, challengeLevelNumber, onChallengeSuccess]);
+
+  // Reset "Not quite" when user edits the graph so they can submit again
+  useEffect(() => {
+    if (submitResult === "wrong") setSubmitResult("idle");
+  }, [nodes, edges]);
+
   // ── Get feedback (chat) ──
   const handleFeedbackSend = useCallback(
     async (userMessage: string) => {
@@ -363,7 +452,11 @@ function CanvasInner({
         const metadata = row
           ? { name: row.name, created_at: (row.graph_json as { metadata?: { created_at?: string } } | undefined)?.metadata?.created_at }
           : undefined;
-        const graph = neuralCanvasToGraphSchema(nodes, edges, metadata);
+        const graph = neuralCanvasToGraphSchema(
+          nodes.filter((n) => n.type !== CHALLENGE_TASK_NODE_TYPE),
+          edges,
+          metadata
+        );
         const base = getApiBase();
         const res = await fetch(`${base}/api/feedback`, {
           method: "POST",
@@ -538,6 +631,13 @@ function CanvasInner({
 
       {/* ── Top-right toolbar ── */}
       <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
+        {challengeSolutionGraph && (
+          <SubmitChallengeButton
+            onSubmit={handleSubmitChallenge}
+            result={submitResult}
+            disabled={nodes.filter((n) => n.type !== CHALLENGE_TASK_NODE_TYPE).length === 0}
+          />
+        )}
         <FeedbackButton
           onSend={handleFeedbackSend}
           loading={feedbackLoading}
@@ -744,6 +844,51 @@ function FeedbackButton({
   );
 }
 
+// ── Submit challenge button (compare to solution) ──
+function SubmitChallengeButton({
+  onSubmit,
+  result,
+  disabled,
+}: {
+  onSubmit: () => void;
+  result: "idle" | "correct" | "wrong";
+  disabled: boolean;
+}) {
+  const label =
+    result === "correct"
+      ? "Correct!"
+      : result === "wrong"
+        ? "Not quite"
+        : "Submit";
+  return (
+    <button
+      type="button"
+      onClick={onSubmit}
+      disabled={disabled}
+      className={`
+        flex items-center gap-2 px-3 py-1.5 rounded-full
+        border backdrop-blur text-[10px] font-mono font-semibold
+        transition-all duration-200 select-none
+        ${
+          result === "correct"
+            ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-400"
+            : result === "wrong"
+              ? "bg-amber-500/20 border-amber-500/50 text-amber-400"
+              : disabled
+                ? "bg-neural-surface/50 border-neural-border text-neutral-600 cursor-not-allowed"
+                : "bg-amber-500/15 border-amber-500/40 text-amber-400 hover:bg-amber-500/25 hover:border-amber-500/50"
+        }
+      `}
+      title={disabled ? "Add blocks to submit" : "Check if your graph matches the solution"}
+    >
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="20 6 9 17 4 12" />
+      </svg>
+      {label}
+    </button>
+  );
+}
+
 // ── Save to Supabase button ──
 function SaveButton({
   onSave,
@@ -909,6 +1054,8 @@ function PeepInsideOverlay() {
 // Exported wrapper (provides ShapeContext)
 // ---------------------------------------------------------------------------
 
+const CHALLENGE_TASK_NODE_ID = "challenge-task";
+
 export interface NeuralCanvasProps {
   /** When provided (e.g. from a challenge level), the canvas starts with this graph instead of the default demo. */
   initialNodes?: Node[];
@@ -917,6 +1064,14 @@ export interface NeuralCanvasProps {
   playgroundId?: string;
   /** Display name for the playground (used when saving). */
   playgroundName?: string;
+  /** When provided (e.g. challenge level), a task label is shown on the canvas (scales with zoom, coverable). */
+  challengeTask?: string | null;
+  /** When provided with a challenge, Submit checks current graph against this solution. */
+  challengeSolutionGraph?: GraphSchema | null;
+  /** Level number for the current challenge; when submit is correct, passed to onChallengeSuccess. */
+  challengeLevelNumber?: number | null;
+  /** Called when the user submits and the graph matches the solution; use to save completion, show confetti, redirect. */
+  onChallengeSuccess?: (levelNumber: number) => void;
 }
 
 export default function NeuralCanvas({
@@ -924,7 +1079,26 @@ export default function NeuralCanvas({
   initialEdges,
   playgroundId,
   playgroundName,
+  challengeTask,
+  challengeSolutionGraph,
+  challengeLevelNumber,
+  onChallengeSuccess,
 }: NeuralCanvasProps = {}) {
+  const effectiveInitialNodes = useMemo(() => {
+    const base = initialNodes ?? INITIAL_NODES;
+    if (!challengeTask?.trim()) return base;
+    const taskNode: Node = {
+      id: CHALLENGE_TASK_NODE_ID,
+      type: CHALLENGE_TASK_NODE_TYPE,
+      position: { x: 24, y: 24 },
+      data: { task: challengeTask.trim() },
+      draggable: false,
+      selectable: false,
+      connectable: false,
+    };
+    return [taskNode, ...base];
+  }, [initialNodes, challengeTask]);
+
   return (
     <ReactFlowProvider>
       <ShapeProvider>
@@ -932,10 +1106,13 @@ export default function NeuralCanvas({
           <GradientFlowProvider>
             <div className="w-full h-full min-h-0 bg-neural-bg">
               <CanvasInner
-                initialNodes={initialNodes}
+                initialNodes={effectiveInitialNodes}
                 initialEdges={initialEdges}
                 playgroundId={playgroundId}
                 playgroundName={playgroundName}
+                challengeSolutionGraph={challengeSolutionGraph}
+                challengeLevelNumber={challengeLevelNumber}
+                onChallengeSuccess={onChallengeSuccess}
               />
             </div>
           </GradientFlowProvider>
