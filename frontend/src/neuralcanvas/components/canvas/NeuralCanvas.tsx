@@ -54,7 +54,9 @@ import {
 } from "@/neuralcanvas/components/peep-inside/GradientFlowContext";
 import { neuralCanvasToGraphSchema } from "@/lib/levelGraphAdapter";
 import { createPlayground, updatePlayground, getPlayground } from "@/lib/supabase/playgrounds";
+import { insertChatMessage, getChatHistory } from "@/lib/supabase/userHistories";
 import { getApiBase } from "@/neuralcanvas/lib/trainingApi";
+import ReactMarkdown from "react-markdown";
 import {
   InputBlock,
   OutputBlock,
@@ -179,6 +181,20 @@ function CanvasInner({
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [feedbackMessages, setFeedbackMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
   const [feedbackChatOpen, setFeedbackChatOpen] = useState(false);
+
+  // ── Load chat history from Supabase when playground loads ──
+  useEffect(() => {
+    if (!playgroundId) return;
+    let cancelled = false;
+    getChatHistory(playgroundId)
+      .then((history) => {
+        if (!cancelled) setFeedbackMessages(history);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [playgroundId]);
 
   // ── Drag-and-drop from palette ──
   const onDragOver = useCallback((e: React.DragEvent) => {
@@ -332,11 +348,15 @@ function CanvasInner({
   const handleFeedbackSend = useCallback(
     async (userMessage: string) => {
       if (nodes.length === 0 || !userMessage.trim()) return;
+      const trimmed = userMessage.trim();
       const newMessages: { role: "user" | "assistant"; content: string }[] = [
         ...feedbackMessages,
-        { role: "user", content: userMessage.trim() },
+        { role: "user", content: trimmed },
       ];
       setFeedbackMessages(newMessages);
+      if (playgroundId) {
+        insertChatMessage(playgroundId, "user", trimmed).catch(() => {});
+      }
       setFeedbackLoading(true);
       try {
         const row = playgroundId ? await getPlayground(playgroundId) : null;
@@ -351,22 +371,22 @@ function CanvasInner({
           body: JSON.stringify({ graph, messages: newMessages }),
         });
         const data = await res.json().catch(() => ({}));
+        let assistantContent: string;
         if (!res.ok) {
-          setFeedbackMessages((m) => [
-            ...m,
-            { role: "assistant", content: (data.detail ?? res.statusText ?? "Request failed") as string },
-          ]);
-          return;
+          assistantContent = (data.detail ?? res.statusText ?? "Request failed") as string;
+        } else {
+          assistantContent = data.feedback ?? "No response.";
         }
-        setFeedbackMessages((m) => [
-          ...m,
-          { role: "assistant", content: data.feedback ?? "No response." },
-        ]);
+        setFeedbackMessages((m) => [...m, { role: "assistant", content: assistantContent }]);
+        if (playgroundId) {
+          insertChatMessage(playgroundId, "assistant", assistantContent).catch(() => {});
+        }
       } catch (e) {
-        setFeedbackMessages((m) => [
-          ...m,
-          { role: "assistant", content: e instanceof Error ? e.message : "Failed to get feedback." },
-        ]);
+        const assistantContent = e instanceof Error ? e.message : "Failed to get feedback.";
+        setFeedbackMessages((m) => [...m, { role: "assistant", content: assistantContent }]);
+        if (playgroundId) {
+          insertChatMessage(playgroundId, "assistant", assistantContent).catch(() => {});
+        }
       } finally {
         setFeedbackLoading(false);
       }
@@ -680,8 +700,19 @@ function FeedbackButton({
                   </div>
                 ) : (
                   <div key={i} className="flex justify-start">
-                    <div className="max-w-[85%] px-3 py-2.5 rounded-2xl rounded-bl-md bg-neural-bg/80 border border-neural-border/50 text-xs text-neutral-300 whitespace-pre-wrap leading-relaxed">
-                      {msg.content}
+                    <div className="max-w-[85%] px-3 py-2.5 rounded-2xl rounded-bl-md bg-neural-bg/80 border border-neural-border/50 text-xs text-neutral-300 leading-relaxed [&_p]:mb-2 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-4 [&_ul]:space-y-1 [&_ol]:list-decimal [&_ol]:pl-4 [&_ol]:space-y-1 [&_strong]:font-semibold [&_strong]:text-neutral-200 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:bg-white/10 [&_code]:text-[11px]">
+                      <ReactMarkdown
+                        components={{
+                          p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                          ul: ({ children }) => <ul className="list-disc pl-4 space-y-1 my-2">{children}</ul>,
+                          ol: ({ children }) => <ol className="list-decimal pl-4 space-y-1 my-2">{children}</ol>,
+                          li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+                          strong: ({ children }) => <strong className="font-semibold text-neutral-200">{children}</strong>,
+                          code: ({ children }) => <code className="px-1 py-0.5 rounded bg-white/10 text-[11px] font-mono">{children}</code>,
+                        }}
+                      >
+                        {msg.content}
+                      </ReactMarkdown>
                     </div>
                   </div>
                 )
