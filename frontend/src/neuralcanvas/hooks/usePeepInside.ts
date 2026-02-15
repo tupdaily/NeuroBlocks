@@ -146,6 +146,11 @@ export function usePeepInside(
   const { blockData } = usePeepData();
   const contextData = blockId ? blockData.get(blockId) ?? null : null;
 
+  if (blockId && blockData.size > 0) {
+    console.log("[usePeepInside] blockId=%s, contextData=%s, blockData keys=%s",
+      blockId, contextData ? "FOUND" : "MISS", [...blockData.keys()].join(","));
+  }
+
   // ── Connect / disconnect based on blockId ──
   useEffect(() => {
     if (!blockId || !blockType) {

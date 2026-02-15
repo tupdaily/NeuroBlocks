@@ -21,7 +21,7 @@ import {
   type GraphSchema,
   type TrainingConfigSchema,
 } from "@/neuralcanvas/lib/trainingApi";
-import { saveTrainedModel } from "@/neuralcanvas/lib/modelsApi";
+import { saveTrainedModel, fetchModelPeepData } from "@/neuralcanvas/lib/modelsApi";
 import { usePrediction } from "@/neuralcanvas/components/canvas/PredictionContext";
 import { usePeepData } from "@/neuralcanvas/components/peep-inside/PeepDataContext";
 import type { TrainingStatus, EpochMetric, BatchUpdate } from "./types";
@@ -62,7 +62,7 @@ export function TrainingPanel({ open: isOpen, onClose, nodes, edges, compact, pl
   const [datasets, setDatasets] = useState<{ id: string; name: string; description: string }[]>([]);
   const [datasetError, setDatasetError] = useState<string | null>(null);
   const { setPredictedClassIndex } = usePrediction();
-  const { setPeepData, clearPeepData } = usePeepData();
+  const { blockData, setPeepData, clearPeepData } = usePeepData();
   const [config, setConfig] = useState<TrainingConfigSchema>(DEFAULT_CONFIG);
   const [status, setStatus] = useState<TrainingStatus>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -177,7 +177,9 @@ export function TrainingPanel({ open: isOpen, onClose, nodes, edges, compact, pl
               setModelName(`Model-${new Date().toLocaleTimeString().replace(/:/g, "-")}`);
               // Store per-block peep data (weights, gradients, filters) for visualization
               const peep = msg.peep_data as Record<string, unknown> | undefined;
-              if (peep && typeof peep === "object") {
+              console.log("[Training] completed message peep_data:", peep ? Object.keys(peep) : "MISSING");
+              if (peep && typeof peep === "object" && Object.keys(peep).length > 0) {
+                console.log("[Training] Setting peep data for blocks:", Object.keys(peep));
                 setPeepData(peep as Record<string, import("@/neuralcanvas/hooks/usePeepInside").PeepData>);
               }
             }
@@ -274,6 +276,20 @@ export function TrainingPanel({ open: isOpen, onClose, nodes, edges, compact, pl
       setModelName("");
       setModelDescription("");
 
+      // If peep data wasn't received via WebSocket (e.g. RunPod training),
+      // fetch it from the saved model via REST endpoint
+      if (blockData.size === 0 && result.model_id) {
+        console.log("[Training] No peep data from WS, fetching from saved model:", result.model_id);
+        fetchModelPeepData(result.model_id)
+          .then((peep) => {
+            if (peep && Object.keys(peep).length > 0) {
+              console.log("[Training] Fetched peep data for blocks:", Object.keys(peep));
+              setPeepData(peep as Record<string, import("@/neuralcanvas/hooks/usePeepInside").PeepData>);
+            }
+          })
+          .catch((err) => console.warn("[Training] Failed to fetch peep data:", err));
+      }
+
       // Auto-close success message after 3 seconds
       setTimeout(() => {
         setSavingSuccess(false);
@@ -285,7 +301,7 @@ export function TrainingPanel({ open: isOpen, onClose, nodes, edges, compact, pl
     } finally {
       setIsSaving(false);
     }
-  }, [graph, lastMessage, modelName, modelDescription, config, playgroundId, userId, nodes, edges, onPlaygroundCreated]);
+  }, [graph, lastMessage, modelName, modelDescription, config, playgroundId, userId, nodes, edges, onPlaygroundCreated, blockData, setPeepData]);
 
   useEffect(() => {
     return () => {

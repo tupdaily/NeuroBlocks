@@ -81,6 +81,19 @@ export async function getModel(modelId: string): Promise<Record<string, unknown>
   return res.json();
 }
 
+export async function fetchModelPeepData(modelId: string): Promise<Record<string, unknown>> {
+  const base = getApiBase();
+  const res = await fetch(`${base}/api/models/${modelId}/peep`);
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail ?? res.statusText ?? "Failed to fetch peep data");
+  }
+
+  const data = await res.json();
+  return data.peep_data || {};
+}
+
 export async function listUserModels(userId: string): Promise<TrainedModel[]> {
   const base = getApiBase();
   const res = await fetch(`${base}/api/users/${userId}/models`);

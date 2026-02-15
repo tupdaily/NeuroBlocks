@@ -62,6 +62,61 @@ async def save_trained_model(request: SaveModelRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/api/models/{model_id}/peep")
+async def get_model_peep_data(model_id: str):
+    """Extract per-block weights, gradients, and filters from a saved model.
+
+    Rebuilds the model from the saved state dict and graph, runs a sample
+    forward+backward pass, and returns inspection data for each block.
+    """
+    import torch
+    import base64
+    import io
+
+    try:
+        model_data = get_model_from_db(model_id)
+        model_state_dict_b64 = get_model_state_dict(model_id)
+
+        graph_json = model_data["graph_json"]
+
+        from models.schemas import GraphSchema
+        from compiler.model_builder import build_model
+        from training.peep_extractor import extract_peep_data
+        from training.datasets import get_dataset_shape
+
+        graph = GraphSchema(**graph_json)
+
+        # Determine input shape from the graph's input node
+        input_nodes = [n for n in graph.nodes if n.type == "input"]
+        input_shape = None
+        if input_nodes:
+            shape_param = input_nodes[0].params.get("shape")
+            if isinstance(shape_param, list):
+                input_shape = tuple(int(s) for s in shape_param)
+
+        model = build_model(graph, input_shape)
+
+        # Load saved weights
+        state_bytes = base64.b64decode(model_state_dict_b64)
+        state_dict = torch.load(io.BytesIO(state_bytes), map_location="cpu", weights_only=True)
+        model.load_state_dict(state_dict)
+
+        # Create a sample batch for activation/gradient extraction
+        sample_batch = None
+        if input_shape:
+            sample_batch = torch.randn(1, *input_shape)
+
+        peep = extract_peep_data(model, graph, sample_batch=sample_batch)
+
+        return {"peep_data": peep}
+
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.exception(f"Failed to extract peep data for model {model_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/api/models/{model_id}")
 async def get_model(model_id: str):
     """Get model metadata.
