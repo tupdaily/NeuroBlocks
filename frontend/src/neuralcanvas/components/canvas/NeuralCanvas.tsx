@@ -54,6 +54,7 @@ import { AugmentPreviewModal } from "@/neuralcanvas/components/augment/AugmentPr
 import { TrainingPanel } from "@/neuralcanvas/components/training/TrainingPanel";
 import { InferencePanel } from "@/neuralcanvas/components/inference/InferencePanel";
 import { GradientFlowProvider } from "@/neuralcanvas/components/peep-inside/GradientFlowContext";
+import { PeepDataProvider } from "@/neuralcanvas/components/peep-inside/PeepDataContext";
 import { neuralCanvasToGraphSchema, levelGraphToNeuralCanvas, graphsMatchStructurally, computeTopologicalLayers } from "@/lib/levelGraphAdapter";
 import type { GraphSchema } from "@/types/graph";
 import { createPlayground, updatePlayground, getPlayground } from "@/lib/supabase/playgrounds";
@@ -1565,6 +1566,7 @@ export default function NeuralCanvas({
     <ReactFlowProvider>
       <ShapeProvider>
         <PredictionProvider>
+          <PeepDataProvider>
           <PeepInsideProvider>
             <GradientFlowProvider>
             <div className="w-full h-full min-h-0 bg-neural-bg">
@@ -1585,6 +1587,7 @@ export default function NeuralCanvas({
             </div>
             </GradientFlowProvider>
           </PeepInsideProvider>
+          </PeepDataProvider>
         </PredictionProvider>
       </ShapeProvider>
     </ReactFlowProvider>

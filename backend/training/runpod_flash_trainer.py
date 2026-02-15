@@ -218,6 +218,16 @@ async def train_model_flash(graph_dict: dict, dataset_id: str, config_dict: dict
         model_size = len(model_data)
         print(f"[FLASH] Model serialized: {model_size} bytes")
 
+        # Extract per-block peep data (weights, gradients, filters) for frontend visualization
+        peep_data = {}
+        try:
+            from training.peep_extractor import extract_peep_data
+            sample_batch, _ = next(iter(val_loader))
+            peep_data = extract_peep_data(model, graph, sample_batch=sample_batch, device=device)
+            print(f"[FLASH] Extracted peep data for {len(peep_data)} blocks")
+        except Exception as e:
+            print(f"[FLASH] Failed to extract peep data: {e}")
+
         result = {
             "type": "completed",
             "history": history,
@@ -228,6 +238,7 @@ async def train_model_flash(graph_dict: dict, dataset_id: str, config_dict: dict
                 "val_acc": round(val_acc, 4)
             },
             "model_size_bytes": model_size,
+            "peep_data": peep_data,
         }
 
         # Upload model to GCS via signed URL to avoid RunPod response size limits

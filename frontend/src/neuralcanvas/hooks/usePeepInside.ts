@@ -1,15 +1,18 @@
 "use client";
 
 // ---------------------------------------------------------------------------
-// usePeepInside — WebSocket-backed hook for fetching block internals
+// usePeepInside — hook for fetching block internals (weights, gradients, etc.)
 // ---------------------------------------------------------------------------
 //
-// When opened, sends a WS message requesting the current state for a block.
-// During training, the backend pushes updates every N steps.
+// Priority order:
+// 1. Real peep data from PeepDataContext (populated after training completes)
+// 2. WebSocket live updates from backend (if /ws/peep endpoint exists)
+// 3. Demo data fallback (random values for UI development)
 // ---------------------------------------------------------------------------
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { BlockType } from "@/neuralcanvas/lib/blockRegistry";
+import { usePeepData } from "@/neuralcanvas/components/peep-inside/PeepDataContext";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -60,7 +63,7 @@ export interface UsePeepInsideReturn {
 // ---------------------------------------------------------------------------
 // Placeholder / demo data generator
 // ---------------------------------------------------------------------------
-// Until the real backend WebSocket endpoint is built, this generates
+// When no real data is available and backend is unreachable, this generates
 // realistic-looking fake data so the UI can be fully developed and tested.
 
 function generateDemoData(blockId: string, blockType: BlockType): PeepData {
@@ -133,16 +136,28 @@ export function usePeepInside(
   blockId: string | null,
   blockType: BlockType | null,
 ): UsePeepInsideReturn {
-  const [data, setData] = useState<PeepData | null>(null);
+  const [wsData, setWsData] = useState<PeepData | null>(null);
   const [loading, setLoading] = useState(false);
   const [live, setLive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
+  // Check PeepDataContext for real training data first
+  const { blockData } = usePeepData();
+  const contextData = blockId ? blockData.get(blockId) ?? null : null;
+
   // ── Connect / disconnect based on blockId ──
   useEffect(() => {
     if (!blockId || !blockType) {
-      setData(null);
+      setWsData(null);
+      setLoading(false);
+      setLive(false);
+      return;
+    }
+
+    // If we already have real data from training, skip WebSocket
+    if (contextData && contextData.step > 0) {
+      setWsData(null);
       setLoading(false);
       setLive(false);
       return;
@@ -166,7 +181,7 @@ export function usePeepInside(
         if (cancelled) return;
         try {
           const payload = JSON.parse(evt.data) as PeepData;
-          setData(payload);
+          setWsData(payload);
           setLoading(false);
           setLive(payload.step > 0);
         } catch {
@@ -177,7 +192,7 @@ export function usePeepInside(
       ws.onerror = () => {
         if (cancelled) return;
         // Fallback to demo data when backend is unavailable.
-        setData(generateDemoData(blockId, blockType));
+        setWsData(generateDemoData(blockId, blockType));
         setLoading(false);
         setLive(false);
         setError(null); // Don't show error — demo mode is fine.
@@ -187,12 +202,12 @@ export function usePeepInside(
         if (cancelled) return;
         setLive(false);
         // If we never got data, generate demo data.
-        setData((prev) => prev ?? generateDemoData(blockId, blockType));
+        setWsData((prev) => prev ?? generateDemoData(blockId, blockType));
         setLoading(false);
       };
     } catch {
       // WebSocket constructor can throw in some SSR scenarios.
-      setData(generateDemoData(blockId, blockType));
+      setWsData(generateDemoData(blockId, blockType));
       setLoading(false);
     }
 
@@ -201,7 +216,7 @@ export function usePeepInside(
       wsRef.current?.close();
       wsRef.current = null;
     };
-  }, [blockId, blockType]);
+  }, [blockId, blockType, contextData]);
 
   // ── Manual refresh ──
   const refresh = useCallback(() => {
@@ -209,12 +224,14 @@ export function usePeepInside(
 
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: "refresh", blockId }));
-    } else {
+    } else if (!contextData) {
       // Regenerate demo data.
-      setData(generateDemoData(blockId, blockType));
+      setWsData(generateDemoData(blockId, blockType));
     }
-  }, [blockId, blockType]);
+  }, [blockId, blockType, contextData]);
 
+  // Use context data (real training data) if available, otherwise WS/demo data
+  const data = contextData ?? wsData;
   const trained = (data?.step ?? 0) > 0;
 
   return { data, loading, trained, live, error, refresh };

@@ -23,6 +23,7 @@ import {
 } from "@/neuralcanvas/lib/trainingApi";
 import { saveTrainedModel } from "@/neuralcanvas/lib/modelsApi";
 import { usePrediction } from "@/neuralcanvas/components/canvas/PredictionContext";
+import { usePeepData } from "@/neuralcanvas/components/peep-inside/PeepDataContext";
 import type { TrainingStatus, EpochMetric, BatchUpdate } from "./types";
 import { LiveTrainingOverlay } from "./LiveTrainingOverlay";
 import { Play, Square, X, AlertTriangle, Database, Settings2, Zap } from "lucide-react";
@@ -61,6 +62,7 @@ export function TrainingPanel({ open: isOpen, onClose, nodes, edges, compact, pl
   const [datasets, setDatasets] = useState<{ id: string; name: string; description: string }[]>([]);
   const [datasetError, setDatasetError] = useState<string | null>(null);
   const { setPredictedClassIndex } = usePrediction();
+  const { setPeepData, clearPeepData } = usePeepData();
   const [config, setConfig] = useState<TrainingConfigSchema>(DEFAULT_CONFIG);
   const [status, setStatus] = useState<TrainingStatus>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -131,6 +133,7 @@ export function TrainingPanel({ open: isOpen, onClose, nodes, edges, compact, pl
     setLastMessage(null);
     setTotalBatches(undefined);
     setLatestBatch(null);
+    clearPeepData();
     try {
       const { job_id } = await startTraining(graph, datasetId, config);
       setJobId(job_id);
@@ -172,6 +175,11 @@ export function TrainingPanel({ open: isOpen, onClose, nodes, edges, compact, pl
             if (type === "completed") {
               setShowSaveDialog(true);
               setModelName(`Model-${new Date().toLocaleTimeString().replace(/:/g, "-")}`);
+              // Store per-block peep data (weights, gradients, filters) for visualization
+              const peep = msg.peep_data as Record<string, unknown> | undefined;
+              if (peep && typeof peep === "object") {
+                setPeepData(peep as Record<string, import("@/neuralcanvas/hooks/usePeepInside").PeepData>);
+              }
             }
             closeWsRef.current?.();
             closeWsRef.current = null;
@@ -193,7 +201,7 @@ export function TrainingPanel({ open: isOpen, onClose, nodes, edges, compact, pl
       setError(e instanceof Error ? e.message : "Failed to start training");
       setStatus("error");
     }
-  }, [graph, graphError, config, datasetId]);
+  }, [graph, graphError, config, datasetId, clearPeepData, setPeepData]);
 
   const handleStop = useCallback(() => {
     if (jobId) {

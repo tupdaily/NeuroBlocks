@@ -313,7 +313,8 @@ async def train_with_runpod_flash(request, ws_callback, stop_event, job_id=None,
             "type": "completed",
             "final_metrics": result.get("final_metrics"),
             "model_state_dict_b64": model_b64,
-            "model_size_bytes": model_size
+            "model_size_bytes": model_size,
+            "peep_data": result.get("peep_data", {}),
         })
 
     except Exception as e:

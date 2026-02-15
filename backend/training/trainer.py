@@ -12,6 +12,7 @@ from typing import Callable, Any
 from models.schemas import GraphSchema, TrainingConfig
 from compiler.model_builder import build_model
 from training.datasets import get_dataloaders, get_dataset_shape
+from training.peep_extractor import extract_peep_data
 
 
 async def train_model(
@@ -41,21 +42,21 @@ async def train_model(
         # dataset is image-based, we pass augmentations (rotation, flip, noise, etc.)
         # to get_dataloaders so the training split is augmented; validation is not.
         IMAGE_DATASETS = {"mnist", "fashion_mnist", "cifar10"}
-        augment_config = None
-        if dataset_id.lower() in IMAGE_DATASETS:
-            input_nodes = [n for n in graph.nodes if n.type == "input"]
-            if input_nodes:
-                input_id = input_nodes[0].id
-                targets_from_input = [e.target for e in graph.edges if e.source == input_id]
-                augment_nodes = [n for n in graph.nodes if n.type == "augment" and n.id in targets_from_input]
-                if augment_nodes:
-                    aug_list = augment_nodes[0].params.get("augmentations")
-                    if isinstance(aug_list, list) and aug_list:
-                        augment_config = aug_list
+        # augment_config = None
+        # if dataset_id.lower() in IMAGE_DATASETS:
+        #     input_nodes = [n for n in graph.nodes if n.type == "input"]
+        #     if input_nodes:
+        #         input_id = input_nodes[0].id
+        #         targets_from_input = [e.target for e in graph.edges if e.source == input_id]
+        #         augment_nodes = [n for n in graph.nodes if n.type == "augment" and n.id in targets_from_input]
+        #         if augment_nodes:
+        #             aug_list = augment_nodes[0].params.get("augmentations")
+        #             if isinstance(aug_list, list) and aug_list:
+        #                 augment_config = aug_list
 
         # Load data (always from Input block's dataset_id; augment_config only adds train-time transforms)
         train_loader, val_loader = get_dataloaders(
-            dataset_id, config.batch_size, config.train_split, augment_config=augment_config
+            dataset_id, config.batch_size, config.train_split
         )
 
         # Loss function from output node
@@ -174,6 +175,14 @@ async def train_model(
                 "elapsed_sec": round(elapsed, 1),
             })
 
+        # Extract per-block peep data (weights, gradients, filters) for frontend visualization
+        peep_data = {}
+        try:
+            sample_batch, _ = next(iter(val_loader))
+            peep_data = extract_peep_data(model, graph, sample_batch=sample_batch, device=device)
+        except Exception as e:
+            logger.warning("Failed to extract peep data: %s", e)
+
         send_msg({
             "type": "completed",
             "final_metrics": {
@@ -182,6 +191,7 @@ async def train_model(
                 "train_acc": round(train_acc, 4),
                 "val_acc": round(val_acc, 4),
             },
+            "peep_data": peep_data,
         })
 
     # We need a thread-safe message queue to bridge sync training → async websocket
