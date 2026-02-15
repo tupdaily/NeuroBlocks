@@ -1,0 +1,41 @@
+# Google Cloud Build configuration for AIPlayground backend
+steps:
+  # Build the Docker image from the backend directory
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/aiplayground-backend:$COMMIT_SHA'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/aiplayground-backend:latest'
+      - './backend'  # Use backend directory as build context
+    dir: '.'  # Run from repo root
+
+  # Push the image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/aiplayground-backend:$COMMIT_SHA'
+
+  # Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'aiplayground-backend'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/aiplayground-backend:$COMMIT_SHA'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+
+images:
+  - 'gcr.io/$PROJECT_ID/aiplayground-backend:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/aiplayground-backend:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: 'E2_HIGHCPU_8'  # More CPU for faster builds
