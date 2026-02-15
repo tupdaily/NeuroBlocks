@@ -12,7 +12,7 @@ from compiler.normalize_graph import normalize_graph
 from compiler.validator import validate_graph, ValidationError
 from training.trainer import train_model
 from training.datasets import register_custom_dataset
-from storage import generate_signed_url
+from storage import generate_signed_url, generate_signed_upload_url
 from config import settings
 
 # Import RunPod Flash trainer only if enabled
@@ -225,12 +225,18 @@ async def train_with_runpod_flash(request, ws_callback, stop_event, job_id=None,
         logger.info(f"Calling RunPod Flash with callback_url={callback_url}")
 
         try:
+            # Generate a signed upload URL so RunPod can upload the model to GCS
+            # instead of returning it in the response (which has size limits)
+            model_gcs_path = f"models/{job_id}/model_state_dict.pt"
+            model_upload_url = generate_signed_upload_url(model_gcs_path, expiration_hours=2)
+
             flash_kwargs = dict(
                 graph_dict=request.graph.dict(),
                 dataset_id=request.dataset_id,
                 config_dict=request.training_config.dict(),
                 job_id=job_id,
                 backend_url=callback_url,
+                model_upload_url=model_upload_url,
             )
             if custom_dataset_meta and custom_dataset_signed_url:
                 flash_kwargs["custom_dataset_meta"] = custom_dataset_meta
@@ -286,12 +292,28 @@ async def train_with_runpod_flash(request, ws_callback, stop_event, job_id=None,
 
             logger.info(f"All {len(epochs_list)} epochs replayed successfully")
 
+        # Download model from GCS if it was uploaded there
+        model_b64 = result.get("model_state_dict_b64")
+        model_size = result.get("model_size_bytes")
+        if not model_b64 and result.get("model_gcs_path"):
+            try:
+                import requests as http_requests
+                download_url = generate_signed_url(result["model_gcs_path"], expiration_hours=1)
+                resp = http_requests.get(download_url, timeout=120)
+                resp.raise_for_status()
+                import base64
+                model_b64 = base64.b64encode(resp.content).decode()
+                model_size = len(resp.content)
+                logger.info("Downloaded model from GCS: %d bytes", model_size)
+            except Exception as e:
+                logger.exception("Failed to download model from GCS: %s", e)
+
         # Send final completion message
         await ws_callback({
             "type": "completed",
             "final_metrics": result.get("final_metrics"),
-            "model_state_dict_b64": result.get("model_state_dict_b64"),
-            "model_size_bytes": result.get("model_size_bytes")
+            "model_state_dict_b64": model_b64,
+            "model_size_bytes": model_size
         })
 
     except Exception as e:
