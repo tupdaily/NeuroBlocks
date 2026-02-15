@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Trash2, Plus, Layout, Trophy, FileText, ChevronRight, Sparkles, Check, LogOut } from "lucide-react";
+import { Trash2, Plus, Layout, Trophy, FileText, ChevronRight, Check, LogOut } from "lucide-react";
 import { listPlaygrounds, deletePlayground } from "@/lib/supabase/playgrounds";
 import { listLevels } from "@/lib/supabase/levels";
 import { getCompletedLevelNumbers } from "@/lib/supabase/levelCompletions";
@@ -15,31 +15,6 @@ import type { PlaygroundRow } from "@/types/playground";
 import type { LevelRow } from "@/types/level";
 
 type TabId = "playground" | "challenges" | "papers";
-
-/* ── Quick-start cards for empty state ──────────────────────────────── */
-const QUICK_STARTS = [
-  {
-    title: "Image Classifier",
-    desc: "Build a simple neural network to recognize handwritten digits",
-    icon: "🖼️",
-    gradient: "from-amber-50 to-orange-50",
-    accentColor: "#F59E0B",
-  },
-  {
-    title: "Text Sentiment",
-    desc: "Create an LSTM model that understands if text is positive or negative",
-    icon: "💬",
-    gradient: "from-pink-50 to-rose-50",
-    accentColor: "#EC4899",
-  },
-  {
-    title: "Transformer",
-    desc: "Assemble an attention-based architecture from scratch",
-    icon: "🧠",
-    gradient: "from-indigo-50 to-violet-50",
-    accentColor: "#6366F1",
-  },
-];
 
 export function HomeDashboard({ user }: { user: User }) {
   const supabase = createClient();
@@ -211,30 +186,6 @@ export function HomeDashboard({ user }: { user: User }) {
                   {loading ? (
                     [...Array(3)].map((_, i) => (
                       <div key={i} className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] min-h-[220px] p-6 animate-shimmer" />
-                    ))
-                  ) : playgrounds.length === 0 ? (
-                    /* Quick-start suggestions */
-                    QUICK_STARTS.map((qs) => (
-                      <Link
-                        key={qs.title}
-                        href="/playground"
-                        className="group rounded-2xl border border-[var(--border)] bg-[var(--surface)] min-h-[220px] flex flex-col overflow-hidden transition-all card-hover"
-                      >
-                        {/* Colored accent strip at top */}
-                        <div className="h-1.5 w-full" style={{ background: qs.accentColor }} />
-                        <div className="p-6 flex flex-col flex-1">
-                          <span className="mb-3 text-3xl">{qs.icon}</span>
-                          <div className="flex items-center gap-2 mb-1">
-                            <Sparkles className="h-3 w-3" style={{ color: qs.accentColor }} />
-                            <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: qs.accentColor }}>Quick Start</span>
-                          </div>
-                          <h3 className="font-semibold text-[var(--foreground)]">{qs.title}</h3>
-                          <p className="mt-1.5 text-sm text-[var(--foreground-muted)] line-clamp-2 flex-1">{qs.desc}</p>
-                          <span className="mt-4 text-sm font-medium text-[var(--accent)] opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-                            Try it <ChevronRight className="h-3.5 w-3.5" />
-                          </span>
-                        </div>
-                      </Link>
                     ))
                   ) : (
                     playgrounds.map((pg) => (

@@ -12,6 +12,7 @@ export { DisplayBlock } from "./DisplayBlock";
 export { LinearBlock } from "./LinearBlock";
 export { Conv2DBlock } from "./Conv2DBlock";
 export { MaxPool2DBlock } from "./MaxPool2DBlock";
+export { MaxPool1DBlock } from "./MaxPool1DBlock";
 export { LSTMBlock } from "./LSTMBlock";
 export { AttentionBlock } from "./AttentionBlock";
 export { LayerNormBlock, BatchNormBlock } from "./NormBlock";

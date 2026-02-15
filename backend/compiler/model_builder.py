@@ -149,6 +149,12 @@ class DynamicModel(nn.Module):
                     stride=int(p.get("stride", 2)),
                 )
 
+            case "maxpool1d":
+                return nn.MaxPool1d(
+                    kernel_size=int(p.get("kernel_size", 2)),
+                    stride=int(p.get("stride", 2)),
+                )
+
             case "adaptiveavgpool2d":
                 out_size = p.get("output_size", [1, 1])
                 return nn.AdaptiveAvgPool2d(
@@ -235,6 +241,17 @@ class DynamicModel(nn.Module):
                     if inp.dim() > 2:
                         inp = inp.flatten(1)
                     outputs[node_id] = self.layers[node_id](inp)
+                continue
+
+            # MaxPool1d: PyTorch expects (N, C, L). Upstream (e.g. Embedding/LSTM) is often (B, seq, C).
+            if node.type == "maxpool1d":
+                if inp.dim() == 3:
+                    # (B, L, C) -> (B, C, L) for MaxPool1d, then back
+                    inp = inp.transpose(1, 2)
+                out = self.layers[node_id](inp)
+                if inp.dim() == 3:
+                    out = out.transpose(1, 2)
+                outputs[node_id] = out
                 continue
 
             outputs[node_id] = self.layers[node_id](inp)

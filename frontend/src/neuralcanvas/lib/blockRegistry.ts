@@ -46,6 +46,7 @@ export type BlockType =
   | "Linear"
   | "Conv2D"
   | "MaxPool2D"
+  | "MaxPool1D"
   | "LSTM"
   | "Attention"
   | "LayerNorm"
@@ -268,6 +269,23 @@ const MAXPOOL2D_BLOCK: BlockDefinition = {
   outputPorts: [{ id: "out", label: "Output" }],
   color: BLOCK_COLORS.Conv2D,
   description: "2-D max pooling. Reduces spatial dimensions. Input: 4D [B, C, H, W].",
+};
+
+const MAXPOOL1D_BLOCK: BlockDefinition = {
+  id: "MaxPool1D",
+  type: "MaxPool1D",
+  label: "MaxPool1D",
+  icon: "minimize-2",
+  category: "layer",
+  defaultParams: { kernel_size: 2, stride: 2 },
+  paramSchema: [
+    { name: "kernel_size", type: "int", min: 1, max: 31 },
+    { name: "stride", type: "int", min: 1, max: 16 },
+  ],
+  inputPorts: [{ id: "in", label: "Input", expectedDims: 3 }],
+  outputPorts: [{ id: "out", label: "Output" }],
+  color: BLOCK_COLORS.Conv2D,
+  description: "1-D max pooling. Reduces sequence length. Input: 3D [B, C, L].",
 };
 
 const LSTM_BLOCK: BlockDefinition = {
@@ -528,6 +546,7 @@ export const BLOCK_REGISTRY: Record<BlockType, BlockDefinition> = {
   Linear: LINEAR_BLOCK,
   Conv2D: CONV2D_BLOCK,
   MaxPool2D: MAXPOOL2D_BLOCK,
+  MaxPool1D: MAXPOOL1D_BLOCK,
   LSTM: LSTM_BLOCK,
   Attention: ATTENTION_BLOCK,
   LayerNorm: LAYERNORM_BLOCK,

@@ -134,6 +134,16 @@ function toBackendNodeType(
         params: { kernel_size: kernelSize, stride },
       };
     }
+    case "MaxPool1D": {
+      const kRaw = params.kernel_size ?? 2;
+      const kernelSize = Array.isArray(kRaw) ? (kRaw[0] as number) ?? 2 : (typeof kRaw === "number" ? kRaw : parseInt(String(kRaw), 10) || 2);
+      const sRaw = params.stride ?? kernelSize;
+      const stride = Array.isArray(sRaw) ? (sRaw[0] as number) ?? kernelSize : (typeof sRaw === "number" ? sRaw : parseInt(String(sRaw), 10) || kernelSize);
+      return {
+        type: "maxpool1d",
+        params: { kernel_size: kernelSize, stride },
+      };
+    }
     case "Flatten":
       return { type: "flatten", params: {} };
     case "Activation": {

@@ -62,6 +62,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getApiBase } from "@/neuralcanvas/lib/trainingApi";
 import ReactMarkdown from "react-markdown";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { Hand, Square } from "lucide-react";
 import {
   InputBlock,
   InputSpaceBlock,
@@ -72,6 +73,7 @@ import {
   LinearBlock,
   Conv2DBlock,
   MaxPool2DBlock,
+  MaxPool1DBlock,
   LSTMBlock,
   AttentionBlock,
   LayerNormBlock,
@@ -144,6 +146,7 @@ const nodeTypes: NodeTypes = {
   Linear: LinearBlock,
   Conv2D: Conv2DBlock,
   MaxPool2D: MaxPool2DBlock,
+  MaxPool1D: MaxPool1DBlock,
   LSTM: LSTMBlock,
   Attention: AttentionBlock,
   LayerNorm: LayerNormBlock,
@@ -262,7 +265,12 @@ function CanvasInner({
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges ?? INITIAL_EDGES);
   const { shapes, recompute } = useShapes();
   const { takeSnapshot, undo, redo } = useUndoRedo();
-  const [panOnDrag, setPanOnDrag] = useState(true);
+  type CanvasTool = "pan" | "select";
+  const [canvasTool, setCanvasTool] = useState<CanvasTool>("pan");
+  const [spaceKeyHeld, setSpaceKeyHeld] = useState(false);
+  // When Pan tool: drag pans (unless Space held). When Select tool: drag draws selection rect.
+  const effectivePanOnDrag = canvasTool === "pan" && !spaceKeyHeld;
+  const selectionOnDrag = !effectivePanOnDrag;
   const [trainingPanelOpen, setTrainingPanelOpen] = useState(false);
   const [inferencePanelOpen, setInferencePanelOpen] = useState(false);
   const [userId, setUserId] = useState<string | undefined>();
@@ -559,11 +567,13 @@ function CanvasInner({
       const row = effectivePlaygroundId ? await getPlayground(effectivePlaygroundId) : null;
       if (row) {
         metadata = {
-          name: row.name,
+          name: playgroundName?.trim() || row.name,
           created_at: (row.graph_json as { metadata?: { created_at?: string } } | undefined)?.metadata?.created_at,
         };
-      } else if (playgroundName) {
-        metadata = { name: playgroundName };
+      } else if (playgroundName?.trim()) {
+        metadata = { name: playgroundName.trim() };
+      } else {
+        metadata = { name: "Untitled" };
       }
       const graph = neuralCanvasToGraphSchema(
         nodes.filter((n) => n.type !== CHALLENGE_TASK_NODE_TYPE),
@@ -571,10 +581,11 @@ function CanvasInner({
         metadata
       );
       if (effectivePlaygroundId) {
+        const nameToSave = playgroundName?.trim() || row?.name || graph.metadata?.name;
         const ok = await updatePlayground(
           effectivePlaygroundId,
           graph,
-          row?.name ?? graph.metadata?.name
+          nameToSave
         );
         setSaveStatus(ok ? "saved" : "error");
         if (ok) setTimeout(() => setSaveStatus("idle"), 2000);
@@ -762,16 +773,16 @@ function CanvasInner({
         return;
       }
 
-      // Space (hold) → temporary selection mode so you can box-select
+      // Space (hold) → temporary selection mode so you can box-select (when Pan tool is active)
       if (e.key === " " && e.type === "keydown") {
         e.preventDefault();
-        setPanOnDrag(false);
+        setSpaceKeyHeld(true);
       }
     };
 
     const keyUp = (e: KeyboardEvent) => {
       if (e.key === " ") {
-        setPanOnDrag(true);
+        setSpaceKeyHeld(false);
       }
     };
 
@@ -853,11 +864,40 @@ function CanvasInner({
       <div
         ref={reactFlowWrapper}
         className="flex-1 h-full relative"
-        style={{ cursor: panOnDrag ? "grab" : "default" }}
+        style={{ cursor: effectivePanOnDrag ? "grab" : "default" }}
         onDragOver={onDragOver}
         onDrop={onDrop}
       >
-        <ReactFlow
+        {/* ── Canvas tools: Pan / Rectangle select ── */}
+      <div className="absolute top-4 left-4 z-20 flex items-center gap-0.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1 shadow-md">
+        <button
+          type="button"
+          onClick={() => setCanvasTool("pan")}
+          className={`rounded-lg p-2 transition-colors ${
+            canvasTool === "pan"
+              ? "bg-[var(--accent-muted)] text-[var(--accent)]"
+              : "text-[var(--foreground-secondary)] hover:bg-[var(--background)] hover:text-[var(--foreground)]"
+          }`}
+          title="Pan (drag to move canvas). Hold Space to temporarily box-select."
+          aria-label="Pan tool"
+        >
+          <Hand size={18} strokeWidth={2} />
+        </button>
+        <button
+          type="button"
+          onClick={() => setCanvasTool("select")}
+          className={`rounded-lg p-2 transition-colors ${
+            canvasTool === "select"
+              ? "bg-[var(--accent-muted)] text-[var(--accent)]"
+              : "text-[var(--foreground-secondary)] hover:bg-[var(--background)] hover:text-[var(--foreground)]"
+          }`}
+          title="Rectangle select (drag to select all blocks inside)"
+          aria-label="Rectangle select tool"
+        >
+          <Square size={18} strokeWidth={2} className="[stroke-dasharray:4_2]" />
+        </button>
+      </div>
+      <ReactFlow
           nodes={nodes}
           edges={edges}
           onNodesChange={handleNodesChange}
@@ -866,8 +906,8 @@ function CanvasInner({
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
           defaultEdgeOptions={defaultEdgeOptions}
-          panOnDrag={panOnDrag}
-          selectionOnDrag={!panOnDrag}
+          panOnDrag={effectivePanOnDrag}
+          selectionOnDrag={selectionOnDrag}
           fitView
           fitViewOptions={fitViewOptions}
           onInit={isPaperLevel
@@ -1014,7 +1054,7 @@ function ChatBar({
 
   return (
     <div
-      className="fixed left-0 right-0 bottom-0 z-40 flex flex-col bg-[var(--surface)]/95 backdrop-blur-md border-t border-[var(--border)] shadow-[0_-4px_24px_rgba(0,0,0,0.08)] transition-[height] duration-300 ease-out"
+      className="absolute left-0 right-0 bottom-0 z-40 flex flex-col bg-[var(--surface)]/95 backdrop-blur-md border-t border-[var(--border)] shadow-[0_-4px_24px_rgba(0,0,0,0.08)] transition-[height] duration-300 ease-out"
       style={{ height: open ? "min(36vh, 280px)" : "52px" }}
     >
       {/* Header bar: click to open when collapsed, or show close when open */}
@@ -1081,13 +1121,13 @@ function ChatBar({
             {messages.map((msg, i) =>
               msg.role === "user" ? (
                 <div key={i} className="flex justify-end">
-                  <div className="max-w-[85%] px-3 py-2 rounded-2xl rounded-br-md bg-[var(--accent-muted)] border border-[var(--accent-strong)] text-xs text-[var(--foreground)]">
+                  <div className="max-w-[65%] px-3 py-2 rounded-2xl rounded-br-md bg-[var(--accent-muted)] border border-[var(--accent-strong)] text-xs text-[var(--foreground)]">
                     {msg.content}
                   </div>
                 </div>
               ) : (
                 <div key={i} className="flex justify-start">
-                  <div className="max-w-[85%] px-3 py-2.5 rounded-2xl rounded-bl-md bg-[var(--surface-elevated)] border border-[var(--border)] text-xs text-[var(--foreground-secondary)] leading-relaxed [&_p]:mb-2 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-4 [&_ul]:space-y-1 [&_ol]:list-decimal [&_ol]:pl-4 [&_ol]:space-y-1 [&_strong]:font-semibold [&_strong]:text-[var(--foreground)] [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:bg-[var(--surface-hover)] [&_code]:text-[11px]">
+                  <div className="max-w-[65%] px-3 py-2.5 rounded-2xl rounded-bl-md bg-[var(--surface-elevated)] border border-[var(--border)] text-xs text-[var(--foreground-secondary)] leading-relaxed [&_p]:mb-2 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-4 [&_ul]:space-y-1 [&_ol]:list-decimal [&_ol]:pl-4 [&_ol]:space-y-1 [&_strong]:font-semibold [&_strong]:text-[var(--foreground)] [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:bg-[var(--surface-hover)] [&_code]:text-[11px]">
                     <ReactMarkdown
                       components={{
                         p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
@@ -1106,7 +1146,7 @@ function ChatBar({
             )}
             {loading && (
               <div className="flex justify-start">
-                <div className="max-w-[85%] px-3 py-2 rounded-2xl rounded-bl-md bg-[var(--surface-elevated)] text-xs text-[var(--foreground-muted)] flex items-center gap-2">
+                <div className="max-w-[65%] px-3 py-2 rounded-2xl rounded-bl-md bg-[var(--surface-elevated)] text-xs text-[var(--foreground-muted)] flex items-center gap-2">
                   <span className="animate-pulse">Thinking...</span>
                 </div>
               </div>

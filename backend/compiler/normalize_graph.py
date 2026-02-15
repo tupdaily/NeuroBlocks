@@ -31,6 +31,7 @@ def _normalize_node_type_and_params(node: GraphNode) -> tuple[str, dict]:
         "linear": "linear",
         "conv2d": "conv2d",
         "maxpool2d": "maxpool2d",
+        "maxpool1d": "maxpool1d",
         "flatten": "flatten",
         "activation": "activation",
         "dropout": "dropout",
@@ -101,6 +102,12 @@ def _normalize_node_type_and_params(node: GraphNode) -> tuple[str, dict]:
         s = _int_param(p.get("stride"), k)
         p = {**p, "kernel_size": k, "stride": s}
 
+    # MaxPool1D: kernel_size, stride as scalars
+    if out_type == "maxpool1d":
+        k = _int_param(p.get("kernel_size"), 2)
+        s = _int_param(p.get("stride"), k)
+        p = {**p, "kernel_size": k, "stride": s}
+
     return (out_type, p)
 
 
@@ -113,7 +120,7 @@ def _normalize_node_dict(n: dict) -> tuple[str, dict]:
 
     type_map = {
         "input": "input", "output": "output", "linear": "linear", "conv2d": "conv2d",
-        "maxpool2d": "maxpool2d", "flatten": "flatten", "activation": "activation",
+        "maxpool2d": "maxpool2d", "maxpool1d": "maxpool1d", "flatten": "flatten", "activation": "activation",
         "dropout": "dropout", "layernorm": "layernorm", "batchnorm": "batchnorm",
         "embedding": "embedding", "attention": "attention", "add": "add", "concat": "concat",
         "softmax": "softmax", "text_input": "text_input",
@@ -161,6 +168,11 @@ def _normalize_node_dict(n: dict) -> tuple[str, dict]:
         p = {**p, "kernel_size": k, "stride": s, "padding": pad}
 
     if out_type == "maxpool2d":
+        k = _int_param(p.get("kernel_size"), 2)
+        s = _int_param(p.get("stride"), k)
+        p = {**p, "kernel_size": k, "stride": s}
+
+    if out_type == "maxpool1d":
         k = _int_param(p.get("kernel_size"), 2)
         s = _int_param(p.get("stride"), k)
         p = {**p, "kernel_size": k, "stride": s}

@@ -298,6 +298,25 @@ function computeBlockShape(
       return { outputShape: [b, c, poolDim(hin), poolDim(win)] };
     }
 
+    // ----- MaxPool1D -----
+    case "MaxPool1D": {
+      if (!inputShape) return { outputShape: null, error: "No input connected." };
+      if (inputShape.length !== 3) {
+        return {
+          outputShape: null,
+          error: `MaxPool1D expects 3D input [batch, channels, length] but got ${inputShape.length}D ${getShapeLabel(inputShape)}.`,
+        };
+      }
+      const [b, c, len] = inputShape;
+      const k = intParam(params, "kernel_size", 2);
+      const s = intParam(params, "stride", 2);
+      const poolDim = (size: Dim): Dim => {
+        if (typeof size !== "number") return size;
+        return Math.floor((size - k) / s) + 1;
+      };
+      return { outputShape: [b, c, poolDim(len)] };
+    }
+
     // ----- Flatten -----
     case "Flatten": {
       if (!inputShape) return { outputShape: null, error: "No input connected." };
@@ -691,6 +710,16 @@ export function validateConnection(
         return {
           valid: false,
           error: `MaxPool2D expects 4D input [batch, channels, height, width] but got ${dims}D ${getShapeLabel(sourceShape)}.`,
+        };
+      }
+      return { valid: true };
+    }
+
+    case "MaxPool1D": {
+      if (dims !== 3) {
+        return {
+          valid: false,
+          error: `MaxPool1D expects 3D input [batch, channels, length] but got ${dims}D ${getShapeLabel(sourceShape)}.`,
         };
       }
       return { valid: true };

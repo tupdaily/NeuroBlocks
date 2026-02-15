@@ -18,7 +18,7 @@ ALLOWED_NODE_TYPES = frozenset({
     "Input", "TextInput", "Output", "Linear", "Conv2D", "LSTM", "Attention",
     "LayerNorm", "BatchNorm", "Activation", "Dropout", "Flatten", "Embedding",
     "TextEmbedding", "PositionalEncoding", "PositionalEmbedding", "Softmax",
-    "Add", "Concat", "MaxPool2D", "MaxPool",
+    "Add", "Concat", "MaxPool2D", "MaxPool", "MaxPool1D",
 })
 # Normalized graphs use lowercase types; activation is "relu"/"gelu" etc. Accept both.
 ALLOWED_NODE_TYPES_LOWER = frozenset(
@@ -44,6 +44,7 @@ BLOCKS_AND_SHAPES_REFERENCE = """
 - **Linear**: Dense layer. Input: 2D [B, in_features]. Output: 2D [B, out_features]. Params: in_features, out_features.
 - **Conv2D**: 2D convolution. Input: 4D [B, C, H, W]. Output: 4D. Params: in_channels, out_channels, kernel_size (integer, e.g. 3), stride (integer, e.g. 1), padding (integer, e.g. 1; do not use "same").
 - **MaxPool2D** (or **MaxPool**): 2D max pooling. Input: 4D [B, C, H, W]. Output: 4D. Params: kernel_size (integer, e.g. 2), stride (integer, e.g. 2). Use type "MaxPool2D" or "MaxPool".
+- **MaxPool1D**: 1D max pooling. Input: 3D [B, C, L] (e.g. sequence or 1D signal). Output: 3D. Params: kernel_size (integer, e.g. 2), stride (integer, e.g. 2).
 - **LSTM**: Recurrent layer. Input: 3D [B, seq, input_size]. Output: 3D. Params: input_size, hidden_size, num_layers.
 - **Attention**: Self-attention. Input: 3D [B, seq, embed_dim]. Output: 3D. Params: embed_dim, num_heads.
 - **LayerNorm**: Layer norm. Input: any, last dim normalized. Params: normalized_shape.
@@ -376,7 +377,7 @@ Current design (full JSON graph):
 
   **Rules (strict):**
   1. Use only the block types listed in the reference above. For Activation use params {{ "activation": "relu" }} or "gelu", "sigmoid", "tanh". For Linear use "in_features" and "out_features".
-  2. **Param format:** Use plain numbers for Conv2D and MaxPool2D (e.g. kernel_size: 3, stride: 1, padding: 1). Do NOT use arrays like [3, 3] or the string "same" for padding. For Input use input_shape as an array of numbers, e.g. [3, 224, 224].
+  2. **Param format:** Use plain numbers for Conv2D, MaxPool2D, and MaxPool1D (e.g. kernel_size: 3, stride: 1, padding: 1 for Conv2D). Do NOT use arrays like [3, 3] or the string "same" for padding. For Input use input_shape as an array of numbers, e.g. [3, 224, 224].
   3. **Every block must be connected:** Exactly one Output; at least one Input or TextInput; every other block must have at least one incoming edge and at least one outgoing edge; there must be a path from some Input/TextInput to the Output. No orphan blocks.
   4. **Layout:** Spread blocks horizontally (position.x increases along the data flow, e.g. 0, 420, 840, ...) and align vertically (blocks in the same "layer" can share the same position.y). Positions will be auto-corrected if needed, but provide sensible x,y so the flow is left-to-right.
 

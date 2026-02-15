@@ -50,6 +50,7 @@ function toNeuralCanvasType(type: string): string {
     conv2d: "Conv2D",
     maxpool2d: "MaxPool2D",
     maxpool: "MaxPool2D",
+    maxpool1d: "MaxPool1D",
     lstm: "LSTM",
     attention: "Attention",
     layernorm: "LayerNorm",

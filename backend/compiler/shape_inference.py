@@ -101,6 +101,27 @@ def infer_shapes(
                 )
             shapes[node_id] = [c, h_out, w_out]
 
+        elif node.type == "maxpool1d":
+            src = get_input_node(graph, node_id)
+            if src is None or src not in shapes:
+                raise ShapeError("MaxPool1d node has no input", node_id)
+            in_shape = shapes[src]
+            if len(in_shape) != 3:
+                raise ShapeError(
+                    f"MaxPool1d expects 3D input (e.g. B, C, L), got shape {in_shape}",
+                    node_id,
+                )
+            b, c, l_in = in_shape
+            k = int(p.get("kernel_size", 2))
+            s = int(p.get("stride", k))
+            l_out = (l_in - k) // s + 1
+            if l_out <= 0:
+                raise ShapeError(
+                    f"MaxPool1d output length is non-positive: ({b}, {c}, {l_out})",
+                    node_id,
+                )
+            shapes[node_id] = [b, c, l_out]
+
         elif node.type == "adaptiveavgpool2d":
             src = get_input_node(graph, node_id)
             if src is None or src not in shapes:

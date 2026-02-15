@@ -313,26 +313,44 @@ export default function PlaygroundNeuralCanvas({
   const hasQuiz = currentStep?.nextQuestion && currentStep?.nextChoices?.length && currentStep?.correctNext;
   const showContinue = quizCorrect === true && hasQuiz;
 
+  const showNameInput = playgroundId != null || isNewPlayground;
+
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-neural-bg">
-      <div className="flex items-center justify-between gap-4 border-b border-neural-border shrink-0 z-30 bg-neural-bg">
+      <div className="flex items-center justify-between gap-4 border-b border-neural-border shrink-0 z-30 bg-neural-bg px-2">
         <Link
           href="/"
           className="shrink-0 px-3 py-2 text-sm text-neural-muted hover:text-neural-accent-light transition"
         >
           ← Home
         </Link>
-        {playgroundId && (
+        {showNameInput ? (
+          <input
+            type="text"
+            value={playgroundName ?? ""}
+            onChange={(e) => setPlaygroundName(e.target.value.trim() || undefined)}
+            placeholder="Untitled"
+            className="flex-1 max-w-md mx-4 px-3 py-2 text-sm bg-transparent border-none rounded-lg text-center text-[var(--foreground)] placeholder:text-neural-muted focus:outline-none focus:ring-2 focus:ring-neural-accent/50 focus:ring-inset"
+            aria-label="Playground name"
+          />
+        ) : (
+          <span className="flex-1 max-w-md mx-4 text-center text-sm text-neural-muted truncate" aria-hidden="true">
+            {levelParam ? `Level ${levelParam}` : ""}
+          </span>
+        )}
+        {playgroundId ? (
           <button
             type="button"
             onClick={handleDeletePlayground}
             disabled={deleting}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm text-neural-muted hover:text-red-400 transition disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-2 text-sm text-neural-muted hover:text-red-400 transition disabled:opacity-50 shrink-0"
             title="Delete playground"
           >
             <Trash2 className="h-4 w-4" />
             Delete
           </button>
+        ) : (
+          <div className="w-14 shrink-0" aria-hidden="true" />
         )}
       </div>
       <div className="flex-1 min-h-0 flex flex-col">
