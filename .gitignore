@@ -24,3 +24,6 @@ backend/uploads/
 Thumbs.db
 
 backend/.runpod/*
+
+.venv/
+.claude/
