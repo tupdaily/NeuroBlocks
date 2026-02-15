@@ -347,13 +347,24 @@ function CanvasInner({
       const edgesToAdd = pending.newEdges.filter(
         (e) => layerIds.has(e.target) && placedIds.has(e.source)
       );
+      // On first layer: clear any existing suggestion (gen-*) to avoid duplicate keys when two networks coexist.
       // Add nodes first so React Flow can measure them before computing edge paths.
-      // User connections work because both nodes exist before the edge is created.
-      setNodes((nds) => [...nds, ...nodesToAdd]);
+      const isFirstLayer = layerIndex === 0;
+      setNodes((nds) => {
+        const base = isFirstLayer
+          ? nds.filter((n) => !String(n.id).startsWith(SUGGESTED_PREFIX))
+          : nds;
+        return [...base, ...nodesToAdd];
+      });
       // Defer edge addition so handle positions are available when ConnectionWire renders.
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          setEdges((eds) => [...eds, ...edgesToAdd]);
+          setEdges((eds) => {
+            const base = isFirstLayer
+              ? eds.filter((e) => !String(e.id).startsWith(SUGGESTED_PREFIX))
+              : eds;
+            return [...base, ...edgesToAdd];
+          });
         });
       });
       layerIndex++;
@@ -694,6 +705,10 @@ function CanvasInner({
             suggestedEdges = [];
           }
           if (suggestedNodes.length > 0 && suggestedEdges.length >= 0) {
+          // Use a unique batch suffix so multiple suggestions (or user + suggestion) never collide
+          const batchId = Date.now().toString(36);
+          const pref = `${SUGGESTED_PREFIX}${batchId}-`;
+
           const maxY =
             nodes.length === 0
               ? 400
@@ -702,7 +717,7 @@ function CanvasInner({
           const offsetY = maxY - minSuggestedY;
 
           const idMap = new Map<string, string>();
-          suggestedNodes.forEach((n) => idMap.set(n.id, SUGGESTED_PREFIX + n.id));
+          suggestedNodes.forEach((n) => idMap.set(n.id, pref + n.id));
 
           const newNodes = suggestedNodes.map((n) => ({
             ...n,
@@ -711,7 +726,7 @@ function CanvasInner({
           }));
           const newEdges = suggestedEdges.map((e) => ({
             ...e,
-            id: SUGGESTED_PREFIX + (e.id ?? `e-${e.source}-${e.target}`),
+            id: pref + (e.id ?? `e-${e.source}-${e.target}`),
             source: idMap.get(e.source) ?? e.source,
             target: idMap.get(e.target) ?? e.target,
           }));
