@@ -93,3 +93,12 @@ class InferenceResponse(BaseModel):
     shape: list[int]
     inference_time_ms: float | None = None
     model_id: str | None = None
+
+
+class ShapeValidationError(BaseModel):
+    """Response when input shape doesn't match model's expected shape."""
+    error: str  # Technical error message
+    message: str  # User-friendly message
+    expected_shape: list[int]  # Expected dimensions
+    actual_shape: list[int]  # Actual dimensions provided
+    suggestion: str | None = None  # Helpful suggestion for fixing

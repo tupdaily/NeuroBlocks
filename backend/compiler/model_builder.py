@@ -155,6 +155,9 @@ class DynamicModel(nn.Module):
                     (int(out_size[0]), int(out_size[1]))
                 )
 
+            case "softmax":
+                return nn.Softmax(dim=1)
+
             case "flatten":
                 return nn.Flatten(start_dim=1)
 

@@ -396,10 +396,8 @@ const SOFTMAX_BLOCK: BlockDefinition = {
   label: "Softmax",
   icon: "percent",
   category: "activation",
-  defaultParams: { dim: -1 },
-  paramSchema: [
-    { name: "dim", type: "int", min: -4, max: 4 },
-  ],
+  defaultParams: {},
+  paramSchema: [],
   inputPorts: [{ id: "in", label: "Input" }],
   outputPorts: [{ id: "out", label: "Output" }],
   color: CATEGORY_COLORS.activation,

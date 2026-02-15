@@ -54,6 +54,7 @@ async def infer_model_flash(
     import time
 
     from compiler.model_builder import build_model
+    from models.schemas import GraphSchema
     import requests
 
     try:
@@ -63,8 +64,14 @@ async def infer_model_flash(
         model_bytes = base64.b64decode(model_state_dict_b64)
         state_dict = torch.load(io.BytesIO(model_bytes), map_location="cpu")
 
+        # Convert dict to GraphSchema object if needed
+        if isinstance(graph_dict, dict):
+            graph_schema = GraphSchema(**graph_dict)
+        else:
+            graph_schema = graph_dict
+
         # Rebuild model from graph
-        model = build_model(graph_dict)
+        model = build_model(graph_schema)
         model.load_state_dict(state_dict)
         model.eval()
 
