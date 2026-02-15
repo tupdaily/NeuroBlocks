@@ -177,7 +177,7 @@ export function levelGraphToNeuralCanvas(schema: GraphSchema): {
   edges: Edge[];
 } {
   const rawNodes = Array.isArray(schema?.nodes) ? schema.nodes : [];
-  const nodes: Node[] = rawNodes
+  const nodes = rawNodes
     .map((n) => {
       const typeStr = typeof n?.type === "string" ? n.type : "Input";
       const canonicalType = toNeuralCanvasType(typeStr);
@@ -190,7 +190,7 @@ export function levelGraphToNeuralCanvas(schema: GraphSchema): {
         data: {
           params: params as Record<string, number | string>,
         },
-      };
+      } as Node;
     })
     .filter((n): n is Node => n !== null);
 
