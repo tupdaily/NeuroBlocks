@@ -110,7 +110,7 @@ export async function listPlaygroundModels(playgroundId: string): Promise<Traine
 export async function runInference(
   modelId: string,
   inputData: number[][] | File | string,
-  inputType: "image" | "text" | "tensor" = "json",
+  inputType: "image" | "text" | "tensor" = "tensor",
   overrides?: { width?: number; height?: number; channels?: number }
 ): Promise<InferenceResponse> {
   const base = getApiBase();
