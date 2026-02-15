@@ -109,7 +109,7 @@ const INPUT_BLOCK: BlockDefinition = {
   inputPorts: [],
   outputPorts: [{ id: "out", label: "Output" }],
   color: CATEGORY_COLORS.input,
-  description: "Model input. Choose dataset in the Training panel.",
+  description: "Model input. Choose dataset on this block.",
 };
 
 const TEXT_INPUT_BLOCK: BlockDefinition = {

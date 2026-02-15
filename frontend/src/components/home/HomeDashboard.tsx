@@ -9,6 +9,8 @@ import { Trash2 } from "lucide-react";
 import { listPlaygrounds, deletePlayground } from "@/lib/supabase/playgrounds";
 import { listLevels } from "@/lib/supabase/levels";
 import { getCompletedLevelNumbers } from "@/lib/supabase/levelCompletions";
+import { getPaperProgress } from "@/lib/supabase/paperProgress";
+import { PAPER_WALKTHROUGHS } from "@/lib/paperWalkthroughs";
 import type { PlaygroundRow } from "@/types/playground";
 import type { LevelRow } from "@/types/level";
 
@@ -26,6 +28,7 @@ export function HomeDashboard({ user }: { user: User }) {
   const [playgrounds, setPlaygrounds] = useState<PlaygroundRow[]>([]);
   const [levels, setLevels] = useState<LevelRow[]>([]);
   const [completedLevels, setCompletedLevels] = useState<Set<number>>(new Set());
+  const [paperProgress, setPaperProgress] = useState<Record<number, number>>({});
   const [loading, setLoading] = useState(true);
   const [levelsLoading, setLevelsLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -56,9 +59,10 @@ export function HomeDashboard({ user }: { user: User }) {
   useEffect(() => {
     if (activeTab !== "challenges" && activeTab !== "papers") return;
     setLevelsLoading(true);
-    Promise.all([listLevels(), getCompletedLevelNumbers()]).then(([list, completed]) => {
+    Promise.all([listLevels(), getCompletedLevelNumbers(), getPaperProgress()]).then(([list, completed, progress]) => {
       setLevels(list);
       setCompletedLevels(completed);
+      setPaperProgress(progress);
       setLevelsLoading(false);
     });
   }, [activeTab]);
@@ -369,6 +373,11 @@ export function HomeDashboard({ user }: { user: User }) {
                       <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
                         {paperLevels.map((level) => {
                           const completed = completedLevels.has(level.level_number);
+                          const totalSteps = PAPER_WALKTHROUGHS[level.level_number]?.length ?? 0;
+                          const stepIndex = paperProgress[level.level_number] ?? -1;
+                          const percent = totalSteps > 0
+                            ? Math.min(100, Math.round(((stepIndex + 1) / totalSteps) * 100))
+                            : 0;
                           return (
                             <Link
                               key={level.id}
@@ -384,6 +393,11 @@ export function HomeDashboard({ user }: { user: User }) {
                               </span>
                               <span className="text-xs font-medium text-[var(--foreground-muted)]">
                                 Paper
+                                {percent > 0 && (
+                                  <span className="ml-1.5 text-amber-600 dark:text-amber-400 font-medium">
+                                    · {percent}%
+                                  </span>
+                                )}
                                 {completed && (
                                   <span className="ml-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
                                     · Completed

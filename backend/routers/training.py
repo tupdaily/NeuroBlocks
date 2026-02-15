@@ -18,6 +18,16 @@ if settings.runpod_enabled:
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["training"])
 
+
+def _runpod_callback_url() -> str | None:
+    """URL to give RunPod for callbacks, or None if RunPod cannot reach this backend (e.g. localhost)."""
+    if not settings.runpod_callback_enabled:
+        return None
+    url = (settings.backend_url or "").strip().lower()
+    if not url or "localhost" in url or "127.0.0.1" in url:
+        return None
+    return settings.backend_url.strip()
+
 # Pending jobs: job_id -> TrainingRequest (stored between POST and WS connect)
 pending_jobs: dict[str, TrainingRequest] = {}
 # Active stop events: job_id -> asyncio.Event
@@ -186,13 +196,14 @@ async def train_with_runpod_flash(request, ws_callback, stop_event, job_id=None)
             "message": "Training started on RunPod GPU..."
         })
 
-        # Call the @remote decorated function (returns single result, not a stream)
+        # Only pass a callback URL if RunPod can reach this backend (not localhost)
+        callback_url = _runpod_callback_url()
         result = await train_model_flash(
             graph_dict=request.graph.dict(),
             dataset_id=request.dataset_id,
             config_dict=request.training_config.dict(),
             job_id=job_id,
-            backend_url=settings.backend_url
+            backend_url=callback_url
         )
 
         logger.info(f"RunPod Flash training completed: {result.get('type')}")
@@ -204,14 +215,14 @@ async def train_with_runpod_flash(request, ws_callback, stop_event, job_id=None)
             return
 
         # Send epoch updates from history
-        # If callbacks are enabled, epochs already came via HTTP callbacks
-        # If disabled, replay them here (fallback behavior)
+        # If we passed a callback URL, RunPod already sent epoch updates via HTTP
+        # Otherwise replay from the returned history
         history = result.get("history", {})
         logger.info(f"History type: {type(history)}, History keys: {history.keys() if isinstance(history, dict) else 'N/A'}")
 
         epochs_list = history.get("epochs", [])
 
-        if settings.runpod_callback_enabled and job_id:
+        if callback_url and job_id:
             logger.info(f"Callbacks enabled: skipping epoch replay (updates already sent via HTTP callbacks)")
         else:
             logger.info(f"Number of epochs to replay: {len(epochs_list)}")

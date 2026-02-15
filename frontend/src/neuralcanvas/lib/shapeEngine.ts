@@ -163,7 +163,12 @@ function computeBlockShape(
   switch (blockType) {
     // ----- Input -----
     case "Input": {
-      // Shape is for display only; actual input shape comes from dataset chosen in Training panel.
+      // Output shape comes from the dataset chosen on the Input block (params.input_shape as "C,H,W").
+      const shapeStr = params.input_shape;
+      if (typeof shapeStr === "string" && shapeStr.trim().length > 0) {
+        const dims = shapeStr.split(",").map((x) => parseInt(String(x).trim(), 10)).filter((n) => Number.isFinite(n));
+        if (dims.length > 0) return { outputShape: ["B", ...dims] };
+      }
       return { outputShape: ["B", 1, 28, 28] };
     }
 

@@ -32,6 +32,11 @@ def infer_shapes(
             shape = input_shape or tuple(p.get("shape", [1, 28, 28]))
             shapes[node_id] = list(shape)
 
+        elif node.type == "text_input":
+            batch_size = int(p.get("batch_size", 1))
+            seq_len = int(p.get("seq_len", 128))
+            shapes[node_id] = [batch_size, seq_len]
+
         elif node.type == "output":
             src = get_input_node(graph, node_id)
             if src and src in shapes:
@@ -42,10 +47,13 @@ def infer_shapes(
             if src is None or src not in shapes:
                 raise ShapeError("Linear node has no input", node_id)
             in_shape = shapes[src]
-            # Flatten multi-dim input
-            in_features = math.prod(in_shape) if len(in_shape) > 1 else in_shape[0]
             out_features = int(p.get("out_features", 128))
-            shapes[node_id] = [out_features]
+            if len(in_shape) == 3:
+                # [B, seq, d] -> [B, seq, out_features]
+                shapes[node_id] = [in_shape[0], in_shape[1], out_features]
+            else:
+                in_features = math.prod(in_shape) if len(in_shape) > 1 else in_shape[0]
+                shapes[node_id] = [out_features]
 
         elif node.type == "conv2d":
             src = get_input_node(graph, node_id)
@@ -114,6 +122,25 @@ def infer_shapes(
             shapes[node_id] = [math.prod(in_shape)]
 
         elif node.type in ("relu", "gelu", "sigmoid", "tanh", "dropout"):
+            src = get_input_node(graph, node_id)
+            if src is None or src not in shapes:
+                raise ShapeError(f"{node.type} node has no input", node_id)
+            shapes[node_id] = shapes[src]
+
+        elif node.type == "embedding":
+            src = get_input_node(graph, node_id)
+            if src is None or src not in shapes:
+                raise ShapeError("Embedding node has no input", node_id)
+            in_shape = shapes[src]
+            if len(in_shape) != 2:
+                raise ShapeError(
+                    f"Embedding expects 2D input [batch, seq_len], got shape {in_shape}",
+                    node_id,
+                )
+            embedding_dim = int(p.get("embedding_dim", 128))
+            shapes[node_id] = [in_shape[0], in_shape[1], embedding_dim]
+
+        elif node.type in ("attention", "positional_encoding", "positional_embedding"):
             src = get_input_node(graph, node_id)
             if src is None or src not in shapes:
                 raise ShapeError(f"{node.type} node has no input", node_id)

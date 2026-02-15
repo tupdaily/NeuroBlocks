@@ -56,6 +56,7 @@ import {
 import { neuralCanvasToGraphSchema, graphsMatchStructurally } from "@/lib/levelGraphAdapter";
 import type { GraphSchema } from "@/types/graph";
 import { createPlayground, updatePlayground, getPlayground } from "@/lib/supabase/playgrounds";
+import { upsertPaperProgress } from "@/lib/supabase/paperProgress";
 import { insertChatMessage, getChatHistory } from "@/lib/supabase/userHistories";
 import { getApiBase } from "@/neuralcanvas/lib/trainingApi";
 import ReactMarkdown from "react-markdown";
@@ -210,6 +211,8 @@ function CanvasInner({
   challengeLevelNumber,
   onChallengeSuccess,
   isPaperLevel,
+  paperLevelNumber,
+  paperStepIndex,
 }: {
   initialNodes?: Node[];
   initialEdges?: Edge[];
@@ -219,6 +222,8 @@ function CanvasInner({
   challengeLevelNumber?: number | null;
   onChallengeSuccess?: (levelNumber: number) => void;
   isPaperLevel?: boolean;
+  paperLevelNumber?: number | null;
+  paperStepIndex?: number | null;
 }) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes ?? INITIAL_NODES);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges ?? INITIAL_EDGES);
@@ -389,9 +394,16 @@ function CanvasInner({
     setNodes((nds) => [...nds, clone]);
   }, [nodes, edges, setNodes, takeSnapshot]);
 
-  // ── Save to Supabase ──
+  // ── Save to Supabase (or paper progress when on paper level) ──
   const router = useRouter();
   const handleSave = useCallback(async () => {
+    if (isPaperLevel && paperLevelNumber != null && paperStepIndex != null) {
+      setSaveStatus("saving");
+      const ok = await upsertPaperProgress(paperLevelNumber, paperStepIndex);
+      setSaveStatus(ok ? "saved" : "error");
+      if (ok) setTimeout(() => setSaveStatus("idle"), 2000);
+      return;
+    }
     if (nodes.length === 0) return;
     setSaveStatus("saving");
     try {
@@ -431,7 +443,7 @@ function CanvasInner({
     } catch {
       setSaveStatus("error");
     }
-  }, [nodes, edges, playgroundId, playgroundName, router]);
+  }, [nodes, edges, playgroundId, playgroundName, router, isPaperLevel, paperLevelNumber, paperStepIndex]);
 
   // ── Submit challenge (compare current graph to solution) ──
   const handleSubmitChallenge = useCallback(() => {
@@ -653,7 +665,7 @@ function CanvasInner({
 
       {/* ── Top-right toolbar ── */}
       <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
-        {challengeSolutionGraph && (
+        {challengeSolutionGraph && !isPaperLevel && (
           <SubmitChallengeButton
             onSubmit={handleSubmitChallenge}
             result={submitResult}
@@ -674,7 +686,7 @@ function CanvasInner({
         <SaveButton
           onSave={handleSave}
           status={saveStatus}
-          disabled={nodes.length === 0}
+          disabled={!(isPaperLevel && paperLevelNumber != null && paperStepIndex != null) && nodes.length === 0}
         />
         {challengeLevelNumber == null && (
           <div className="relative">
@@ -949,7 +961,7 @@ function SaveButton({
               ? "bg-red-500/10 border-red-500/30 text-red-400"
               : disabled || status === "saving"
                 ? "bg-neural-surface/50 border-neural-border text-neutral-600 cursor-not-allowed"
-                : "bg-neural-surface/80 border-neural-border text-neutral-300 hover:text-white hover:border-neutral-500"
+                : "bg-emerald-500/20 border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/30 hover:border-emerald-500/60"
         }
       `}
       title={disabled ? "Add blocks to save" : "Save to Supabase"}
@@ -1100,6 +1112,9 @@ export interface NeuralCanvasProps {
   challengeLevelNumber?: number | null;
   /** Called when the user submits and the graph matches the solution; use to save completion, show confetti, redirect. */
   onChallengeSuccess?: (levelNumber: number) => void;
+  /** When on a paper walkthrough, Save persists this level number and step index. */
+  paperLevelNumber?: number | null;
+  paperStepIndex?: number | null;
 }
 
 export default function NeuralCanvas({
@@ -1112,6 +1127,8 @@ export default function NeuralCanvas({
   challengeSolutionGraph,
   challengeLevelNumber,
   onChallengeSuccess,
+  paperLevelNumber = null,
+  paperStepIndex = null,
 }: NeuralCanvasProps = {}) {
   const effectiveInitialNodes = useMemo(() => {
     const base = initialNodes ?? INITIAL_NODES;
@@ -1144,6 +1161,8 @@ export default function NeuralCanvas({
                 challengeLevelNumber={challengeLevelNumber}
                 onChallengeSuccess={onChallengeSuccess}
                 isPaperLevel={isPaperLevel}
+                paperLevelNumber={paperLevelNumber ?? undefined}
+                paperStepIndex={paperStepIndex ?? undefined}
               />
             </div>
           </GradientFlowProvider>

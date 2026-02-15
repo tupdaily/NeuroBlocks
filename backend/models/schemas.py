@@ -52,6 +52,11 @@ class ChatMessage(BaseModel):
 class FeedbackRequest(BaseModel):
     graph: GraphSchema
     messages: list[ChatMessage]  # conversation history
+    # Optional context for paper walkthrough: paper description + current quiz
+    paper_context: str | None = None
+    quiz_question: str | None = None
+    quiz_choices: list[str] | None = None
+    quiz_correct: str | None = None
 
 
 class ValidationResult(BaseModel):

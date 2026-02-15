@@ -5,6 +5,42 @@ import math
 import torch
 import torch.nn as nn
 from models.schemas import GraphSchema
+
+
+class PositionalEncoding(nn.Module):
+    """Sinusoidal positional encoding (Vaswani et al., Attention is All You Need)."""
+
+    def __init__(self, d_model: int, max_len: int = 512, dropout: float = 0.0):
+        super().__init__()
+        self.dropout = nn.Dropout(p=dropout)
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        self.register_buffer("pe", pe.unsqueeze(0))  # [1, max_len, d_model]
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x: [B, seq_len, d_model]
+        seq_len = x.size(1)
+        x = x + self.pe[:, :seq_len, :]
+        return self.dropout(x)
+
+
+class PositionalEmbedding(nn.Module):
+    """Learned positional embeddings added to the sequence (e.g. BERT-style)."""
+
+    def __init__(self, max_len: int, d_model: int):
+        super().__init__()
+        self.pos_embed = nn.Embedding(max_len, d_model)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x: [B, seq_len, d_model]
+        seq_len = x.size(1)
+        positions = torch.arange(seq_len, device=x.device, dtype=torch.long)
+        return x + self.pos_embed(positions).unsqueeze(0)
+
+
 from compiler.validator import (
     topological_sort,
     get_input_node,
@@ -39,13 +75,28 @@ class DynamicModel(nn.Module):
         in_shape = shapes.get(src) if src else None
 
         match node.type:
-            case "input" | "output" | "add" | "concat":
+            case "input" | "text_input" | "output" | "add" | "concat":
                 return None
 
+            case "embedding":
+                num_embeddings = int(p.get("num_embeddings", 10000))
+                embedding_dim = int(p.get("embedding_dim", 128))
+                return nn.Embedding(num_embeddings, embedding_dim)
+
+            case "positional_embedding":
+                max_len = int(p.get("max_len", 512))
+                d_model = int(p.get("d_model", 128))
+                return PositionalEmbedding(max_len, d_model)
+
             case "linear":
-                in_features = (
-                    math.prod(in_shape) if in_shape and len(in_shape) > 1 else (in_shape[0] if in_shape else 128)
-                )
+                if in_shape and len(in_shape) == 3:
+                    in_features = in_shape[-1]  # [B, seq, d] -> apply to last dim
+                elif in_shape and len(in_shape) > 1:
+                    in_features = math.prod(in_shape)
+                elif in_shape:
+                    in_features = in_shape[0]
+                else:
+                    in_features = 128
                 return nn.Linear(
                     in_features,
                     int(p.get("out_features", 128)),
@@ -71,7 +122,13 @@ class DynamicModel(nn.Module):
 
             case "layernorm":
                 if in_shape:
-                    return nn.LayerNorm(in_shape)
+                    # For 3D [B, seq, d] use last dim only; for 1D/2D use full shape
+                    normalized = (
+                        (in_shape[-1],)
+                        if len(in_shape) > 1
+                        else tuple(in_shape)
+                    )
+                    return nn.LayerNorm(normalized)
                 return nn.Identity()
 
             case "dropout":
@@ -101,6 +158,20 @@ class DynamicModel(nn.Module):
             case "flatten":
                 return nn.Flatten(start_dim=1)
 
+            case "positional_encoding":
+                d_model = int(p.get("d_model", 128))
+                max_len = int(p.get("max_len", 512))
+                return PositionalEncoding(d_model, max_len=max_len)
+
+            case "attention":
+                embed_dim = int(p.get("embed_dim", 128))
+                num_heads = int(p.get("num_heads", 4))
+                return nn.MultiheadAttention(
+                    embed_dim=embed_dim,
+                    num_heads=num_heads,
+                    batch_first=True,
+                )
+
             case _:
                 return nn.Identity()
 
@@ -110,7 +181,7 @@ class DynamicModel(nn.Module):
         for node_id in self.topo_order:
             node = self.nodes_by_id[node_id]
 
-            if node.type == "input":
+            if node.type == "input" or node.type == "text_input":
                 outputs[node_id] = x
                 continue
 
@@ -133,6 +204,16 @@ class DynamicModel(nn.Module):
                 )
                 continue
 
+            # MultiheadAttention: query, key, value (self-attention: all same)
+            if node.type == "attention":
+                src = get_input_node(self.graph, node_id)
+                if src is None:
+                    raise RuntimeError(f"Node {node_id} (attention) has no input")
+                inp = outputs[src]
+                attn_out, _ = self.layers[node_id](inp, inp, inp)
+                outputs[node_id] = attn_out
+                continue
+
             # Standard single-input layer
             src = get_input_node(self.graph, node_id)
             if src is None:
@@ -140,9 +221,18 @@ class DynamicModel(nn.Module):
 
             inp = outputs[src]
 
-            # Auto-flatten before linear layers if input is multi-dimensional
-            if node.type == "linear" and inp.dim() > 2:
-                inp = inp.flatten(1)
+            # Linear: for 3D [B, seq, d] apply to last dim; otherwise flatten
+            if node.type == "linear":
+                if inp.dim() == 3:
+                    b, seq_len, d = inp.shape
+                    inp = inp.reshape(-1, d)
+                    out = self.layers[node_id](inp)
+                    outputs[node_id] = out.reshape(b, seq_len, -1)
+                else:
+                    if inp.dim() > 2:
+                        inp = inp.flatten(1)
+                    outputs[node_id] = self.layers[node_id](inp)
+                continue
 
             outputs[node_id] = self.layers[node_id](inp)
 

@@ -12,7 +12,17 @@ interface BlockData extends Record<string, unknown> {
   params: Record<string, number | string>;
 }
 
+const ACTIVATION_FORMULAS: Record<string, string> = {
+  relu: "max(0, x)",
+  gelu: "x·Φ(x)",
+  sigmoid: "σ(x)",
+  tanh: "tanh(x)",
+  softmax: "softmax(x)",
+};
+
 function ActivationBlockComponent({ id, data, selected }: NodeProps<Node<BlockData>>) {
+  const act = String(data?.params?.activation ?? "relu").toLowerCase();
+  const formula = ACTIVATION_FORMULAS[act] ?? `${act}(x)`;
   return (
     <BaseBlock
       id={id}
@@ -20,9 +30,8 @@ function ActivationBlockComponent({ id, data, selected }: NodeProps<Node<BlockDa
       params={data?.params ?? {}}
       selected={!!selected}
     >
-      {/* Visual hint of the selected function */}
-      <p className="text-[9px] text-neutral-500 font-mono">
-        f(x) = {String(data?.params?.activation ?? "relu")}(x)
+      <p className="text-[6px] text-neutral-500 font-mono whitespace-nowrap overflow-hidden text-ellipsis tabular-nums">
+        {formula}
       </p>
     </BaseBlock>
   );

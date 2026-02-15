@@ -74,8 +74,15 @@ function toBackendNodeType(
 ): { type: string; params: Record<string, unknown> } {
   const typeLower = frontendType.toLowerCase();
   switch (frontendType) {
-    case "Input":
-      return { type: "input", params: { ...params, shape: [1, 28, 28] } };
+    case "Input": {
+      let shape: number[] = [1, 28, 28];
+      const shapeStr = params.input_shape;
+      if (typeof shapeStr === "string" && shapeStr.trim().length > 0) {
+        const dims = shapeStr.split(",").map((x) => parseInt(String(x).trim(), 10)).filter((n) => Number.isFinite(n));
+        if (dims.length > 0) shape = dims;
+      }
+      return { type: "input", params: { ...params, shape } };
+    }
     case "TextInput":
       return {
         type: "text_input",

@@ -10,7 +10,6 @@ import {
 import type { Node, Edge } from "@xyflow/react";
 import {
   serializeGraphForTraining,
-  fetchDatasets,
   startTraining,
   openTrainingWebSocket,
   stopTraining,
@@ -37,8 +36,6 @@ const DEFAULT_CONFIG: TrainingConfigSchema = {
 };
 
 export function TrainingPanel({ open: isOpen, onClose, nodes, edges, compact }: TrainingPanelProps) {
-  const [datasets, setDatasets] = useState<{ id: string; name: string; description: string }[]>([]);
-  const [datasetError, setDatasetError] = useState<string | null>(null);
   const [config, setConfig] = useState<TrainingConfigSchema>(DEFAULT_CONFIG);
   const [status, setStatus] = useState<TrainingStatus>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -49,26 +46,15 @@ export function TrainingPanel({ open: isOpen, onClose, nodes, edges, compact }: 
   const [latestBatch, setLatestBatch] = useState<BatchUpdate | null>(null);
   const closeWsRef = useRef<(() => void) | null>(null);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    let cancelled = false;
-    fetchDatasets()
-      .then((list) => {
-        if (!cancelled) {
-          setDatasets(list);
-          setDatasetError(null);
-        }
-      })
-      .catch((e) => {
-        if (!cancelled) {
-          setDatasetError(e instanceof Error ? e.message : "Failed to load datasets");
-          setDatasets([]);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [isOpen]);
+  const datasetId = useMemo(() => {
+    const inputNode = nodes.find((n) => (n.type as string) === "Input");
+    const params = inputNode?.data?.params;
+    if (params && typeof params === "object" && "dataset_id" in params) {
+      const id = (params as Record<string, unknown>).dataset_id;
+      return typeof id === "string" && id ? id : null;
+    }
+    return null;
+  }, [nodes]);
 
   const { graph, error: graphError } = useMemo(
     () => serializeGraphForTraining(nodes, edges),
@@ -80,9 +66,8 @@ export function TrainingPanel({ open: isOpen, onClose, nodes, edges, compact }: 
       setError(graphError ?? "Graph cannot be serialized for training.");
       return;
     }
-    const datasetId = (document.getElementById("training-dataset") as HTMLSelectElement)?.value;
     if (!datasetId) {
-      setError("Select a dataset.");
+      setError("Select a dataset on the Input block.");
       return;
     }
     setError(null);
@@ -149,7 +134,7 @@ export function TrainingPanel({ open: isOpen, onClose, nodes, edges, compact }: 
       setError(e instanceof Error ? e.message : "Failed to start training");
       setStatus("error");
     }
-  }, [graph, graphError, config]);
+  }, [graph, graphError, config, datasetId]);
 
   const handleStop = useCallback(() => {
     if (jobId) {
@@ -198,28 +183,11 @@ export function TrainingPanel({ open: isOpen, onClose, nodes, edges, compact }: 
           </div>
         )}
 
-        {datasetError && (
-          <div className="rounded-lg bg-red-500/10 border border-red-500/30 text-red-200 text-xs p-3">
-            {datasetError}
-            <span className="block mt-1 text-neutral-400">Is the backend running on port 8000?</span>
+        {!datasetId && (
+          <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs p-3 font-mono">
+            Select a dataset on the Input block to train.
           </div>
         )}
-
-        <div className="space-y-2">
-          <label className="block text-xs font-medium text-neutral-400 font-mono">Dataset</label>
-          <select
-            id="training-dataset"
-            className="w-full px-3 py-2 rounded-lg bg-neural-bg border border-neural-border text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-neural-accent"
-            disabled={!!datasetError}
-          >
-            <option value="">Select dataset</option>
-            {datasets.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
-              </option>
-            ))}
-          </select>
-        </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -291,7 +259,7 @@ export function TrainingPanel({ open: isOpen, onClose, nodes, edges, compact }: 
           <button
             type="button"
             onClick={handleStart}
-            disabled={!!graphError || status === "starting" || status === "running"}
+            disabled={!!graphError || !datasetId || status === "starting" || status === "running"}
             className="flex-1 px-4 py-2.5 rounded-lg bg-neural-accent hover:bg-neural-accent-light text-white text-sm font-mono font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {status === "starting" ? "Starting…" : status === "running" ? "Training…" : "Start training"}

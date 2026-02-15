@@ -9,6 +9,7 @@ import { ChevronLeft, ChevronRight, Check, Trash2, X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { getLevelByNumber } from "@/lib/supabase/levels";
 import { getPlayground, deletePlayground } from "@/lib/supabase/playgrounds";
+import { getPaperProgress } from "@/lib/supabase/paperProgress";
 import { recordLevelCompletion } from "@/lib/supabase/levelCompletions";
 import { levelGraphToNeuralCanvas } from "@/lib/levelGraphAdapter";
 import { PAPER_WALKTHROUGHS } from "@/lib/paperWalkthroughs";
@@ -93,16 +94,21 @@ export default function PlaygroundNeuralCanvas({
     }
     setLoading(true);
     setError(null);
-    getLevelByNumber(levelNum)
-      .then((level) => {
+    Promise.all([
+      getLevelByNumber(levelNum),
+      levelNum in PAPER_WALKTHROUGHS ? getPaperProgress() : Promise.resolve({} as Record<number, number>),
+    ])
+      .then(([level, progress]) => {
         if (level?.graph_json) {
           const isPaper = (level.section ?? "challenges") === "papers";
           const steps = levelNum in PAPER_WALKTHROUGHS ? PAPER_WALKTHROUGHS[levelNum as keyof typeof PAPER_WALKTHROUGHS] : null;
           setIsPaperLevel(isPaper);
           if (isPaper && steps?.length) {
             setWalkthroughSteps(steps);
-            setWalkthroughStepIndex(0);
-            const { nodes, edges } = levelGraphToNeuralCanvas(steps[0].graph);
+            const saved = progress[levelNum] ?? 0;
+            const stepIndex = Math.min(Math.max(0, saved), steps.length - 1);
+            setWalkthroughStepIndex(stepIndex);
+            const { nodes, edges } = levelGraphToNeuralCanvas(steps[stepIndex].graph);
             setInitialGraph({ nodes, edges });
           } else {
             setWalkthroughSteps(null);
@@ -347,6 +353,8 @@ export default function PlaygroundNeuralCanvas({
             challengeLevelNumber={challengeLevelNumber}
             onChallengeSuccess={handleChallengeSuccess}
             isPaperLevel={isPaperLevel}
+            paperLevelNumber={inWalkthrough ? challengeLevelNumber : null}
+            paperStepIndex={inWalkthrough ? walkthroughStepIndex : null}
           />
           </div>
         </div>
