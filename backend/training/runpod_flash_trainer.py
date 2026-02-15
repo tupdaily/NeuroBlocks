@@ -20,7 +20,7 @@ gpu_config = LiveServerless(
         "torch>=2.0.0",
         "torchvision>=0.15.0",
         "pydantic==2.10.4",
-        "git+https://github.com/Ryan6407/AIPlayground.git#subdirectory=backend",
+        "git+https://github.com/Ryan6407/AIPlayground.git@peter/custom_data#subdirectory=backend",
         "requests>=2.28.0",
         "Pillow>=10.0.0",
     ]
