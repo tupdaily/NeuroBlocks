@@ -102,14 +102,18 @@ export function HomeDashboard({ user }: { user: User }) {
       <header className="border-b border-[var(--border)] bg-[var(--surface)]/80 backdrop-blur-md sticky top-0 z-50">
         <div className="mx-auto max-w-6xl px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 shadow-sm">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="6" cy="6" r="2" /><circle cx="18" cy="6" r="2" />
-                <circle cx="6" cy="18" r="2" /><circle cx="18" cy="18" r="2" />
-                <path d="M8 6h8M6 8v8M18 8v8M8 18h8" opacity="0.6" />
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 via-violet-500 to-purple-600 shadow-md shadow-violet-500/25">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="7" height="7" rx="1.5" fill="white" fillOpacity="0.25" stroke="white" />
+                <rect x="14" y="4" width="7" height="7" rx="1.5" fill="white" fillOpacity="0.25" stroke="white" />
+                <rect x="8.5" y="13" width="7" height="7" rx="1.5" fill="white" fillOpacity="0.35" stroke="white" />
+                <circle cx="6.5" cy="7.5" r="1" fill="white" />
+                <circle cx="17.5" cy="7.5" r="1" fill="white" />
+                <circle cx="12" cy="16.5" r="1" fill="white" />
+                <path d="M10 10.5L14 10.5M12 11.5V14" opacity="0.7" stroke="white" strokeWidth="1.2" />
               </svg>
             </div>
-            <span className="text-[15px] font-bold text-[var(--foreground)] tracking-tight">AIPlayground</span>
+            <span className="text-[16px] font-semibold text-[var(--foreground)] tracking-tight" style={{ fontFamily: "var(--font-outfit), var(--font-sans)" }}>NeuroBlocks</span>
           </div>
           <div className="flex items-center gap-3">
             <span className="text-sm text-[var(--foreground-secondary)] hidden sm:inline">

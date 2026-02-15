@@ -6,10 +6,10 @@ import asyncio
 
 # Configure GPU resources for RunPod Flash
 gpu_config = LiveServerless(
-    name="aiplayground-training-blocks",  # Static name for endpoint reuse
+    name="aiplayground-training-classification",  # Bumped to force fresh container build
     gpus=[GpuGroup.AMPERE_24],  # Using A4000/RTX 3090 (24GB) - more available and cheaper
-    workersMax=1,  # Reduced to 1 for faster initialization
-    workersMin=0,  # Auto-scale from 0 (no idle workers)
+    workersMax=2,  # Reduced to 1 for faster initialization
+    workersMin=1,  # Auto-scale from 0 (no idle workers)
     idleTimeout=300  # Scale down after 10 seconds of inactivity
 )
 
@@ -25,7 +25,7 @@ gpu_config = LiveServerless(
         "Pillow>=10.0.0",
     ]
 )
-async def train_model_flash(graph_dict: dict, dataset_id: str, config_dict: dict, job_id: str = None, backend_url: str = None, custom_dataset_meta: dict = None, custom_dataset_signed_url: str = None):
+async def train_model_flash(graph_dict: dict, dataset_id: str, config_dict: dict, job_id: str = None, backend_url: str = None, model_upload_url: str = None, custom_dataset_meta: dict = None, custom_dataset_signed_url: str = None):
     """
     Remote training function that runs on RunPod Flash GPU.
 
@@ -59,19 +59,27 @@ async def train_model_flash(graph_dict: dict, dataset_id: str, config_dict: dict
     try:
         # Register custom dataset if provided
         if dataset_id.startswith("custom:") and custom_dataset_meta and custom_dataset_signed_url:
+            print(f"[FLASH] Registering custom dataset: {dataset_id}, format={custom_dataset_meta.get('format')}, shape={custom_dataset_meta.get('input_shape')}")
             register_custom_dataset(dataset_id, custom_dataset_meta, custom_dataset_signed_url)
+            print("[FLASH] Custom dataset registered OK")
 
         # Parse and validate inputs
         graph = GraphSchema(**graph_dict)
         config = TrainingConfig(**config_dict)
+        print(f"[FLASH] Parsed graph and config OK, epochs={config.epochs}, batch_size={config.batch_size}")
 
         # Build model
         input_shape = get_dataset_shape(dataset_id)
+        print(f"[FLASH] Dataset shape: {input_shape}")
         model = build_model(graph, input_shape)
+        print(f"[FLASH] Model built OK")
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model = model.to(device)
+        print(f"[FLASH] Model on {device}")
 
+        # Load data
+        print(f"[FLASH] Loading dataloaders...")
         # Read Augment block config from the graph: when Input -> Augment and the
         # dataset is image-based, we pass augmentations to get_dataloaders so the
         # training split is augmented on the GPU; validation data is unaugmented.
@@ -92,6 +100,7 @@ async def train_model_flash(graph_dict: dict, dataset_id: str, config_dict: dict
         train_loader, val_loader = get_dataloaders(
             dataset_id, config.batch_size, config.train_split, augment_config=augment_config
         )
+        print(f"[FLASH] Dataloaders ready: {len(train_loader)} train batches, {len(val_loader)} val batches")
 
         # Setup loss function
         output_nodes = [n for n in graph.nodes if n.type == "output"]
@@ -102,6 +111,18 @@ async def train_model_flash(graph_dict: dict, dataset_id: str, config_dict: dict
             "BCEWithLogitsLoss": nn.BCEWithLogitsLoss(),
         }
         loss_fn = loss_fn_map.get(loss_fn_name, nn.CrossEntropyLoss())
+
+        # CrossEntropyLoss includes LogSoftmax internally, so having an explicit
+        # Softmax layer causes LogSoftmax(Softmax(x)) which kills gradients.
+        # Replace any trailing Softmax with Identity for these loss functions.
+        if loss_fn_name in ("CrossEntropyLoss", "BCEWithLogitsLoss"):
+            layers = model.layers
+            layer_keys = list(layers.keys())
+            if layer_keys:
+                last_layer = layers[layer_keys[-1]]
+                if isinstance(last_layer, nn.Softmax):
+                    layers[layer_keys[-1]] = nn.Identity()
+                    print(f"[FLASH] Replaced trailing Softmax with Identity (incompatible with {loss_fn_name})")
 
         # Setup optimizer
         opt_map = {
@@ -190,13 +211,14 @@ async def train_model_flash(graph_dict: dict, dataset_id: str, config_dict: dict
                 except Exception as e:
                     print(f"Callback failed (continuing): {e}")
 
-        # Serialize model as base64
+        # Serialize model
         model_bytes = io.BytesIO()
         torch.save(model.state_dict(), model_bytes)
-        model_b64 = base64.b64encode(model_bytes.getvalue()).decode()
+        model_data = model_bytes.getvalue()
+        model_size = len(model_data)
+        print(f"[FLASH] Model serialized: {model_size} bytes")
 
-        # Return all results
-        return {
+        result = {
             "type": "completed",
             "history": history,
             "final_metrics": {
@@ -205,9 +227,28 @@ async def train_model_flash(graph_dict: dict, dataset_id: str, config_dict: dict
                 "train_acc": round(train_acc, 4),
                 "val_acc": round(val_acc, 4)
             },
-            "model_state_dict_b64": model_b64,
-            "model_size_bytes": len(model_bytes.getvalue())
+            "model_size_bytes": model_size,
         }
+
+        # Upload model to GCS via signed URL to avoid RunPod response size limits
+        if model_upload_url:
+            import requests
+            print(f"[FLASH] Uploading model to GCS...")
+            resp = requests.put(
+                model_upload_url,
+                data=model_data,
+                headers={"Content-Type": "application/octet-stream"},
+                timeout=120,
+            )
+            resp.raise_for_status()
+            print(f"[FLASH] Model uploaded to GCS OK")
+            # Return the GCS path so backend can download it
+            result["model_gcs_path"] = f"models/{job_id}/model_state_dict.pt"
+        else:
+            # Fallback: return inline (works for small models)
+            result["model_state_dict_b64"] = base64.b64encode(model_data).decode()
+
+        return result
 
     except Exception as e:
         import traceback

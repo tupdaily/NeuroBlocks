@@ -69,6 +69,17 @@ async def train_model(
         }
         loss_fn = loss_fn_map.get(loss_fn_name, nn.CrossEntropyLoss())
 
+        # CrossEntropyLoss includes LogSoftmax internally, so having an explicit
+        # Softmax layer causes LogSoftmax(Softmax(x)) which kills gradients.
+        # Replace any trailing Softmax with Identity for these loss functions.
+        if loss_fn_name in ("CrossEntropyLoss", "BCEWithLogitsLoss"):
+            layers = model.layers
+            layer_keys = list(layers.keys())
+            if layer_keys:
+                last_layer = layers[layer_keys[-1]]
+                if isinstance(last_layer, nn.Softmax):
+                    layers[layer_keys[-1]] = nn.Identity()
+
         # Optimizer
         opt_map = {
             "adam": lambda params, lr: torch.optim.Adam(params, lr=lr),

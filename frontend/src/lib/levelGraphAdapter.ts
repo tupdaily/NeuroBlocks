@@ -35,7 +35,7 @@ export function neuralCanvasToGraphSchema(
 }
 
 /**
- * Map AIPlayground/levels graph node type (lowercase) to NeuralCanvas BlockType (PascalCase).
+ * Map NeuroBlocks/levels graph node type (lowercase) to NeuralCanvas BlockType (PascalCase).
  * Only types that exist in NeuralCanvas are mapped; unknown types are PascalCased.
  */
 function toNeuralCanvasType(type: string): string {

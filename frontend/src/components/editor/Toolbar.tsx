@@ -116,11 +116,16 @@ export default function Toolbar({ playgroundId }: { playgroundId?: string }) {
   return (
     <header className="h-14 flex-shrink-0 flex items-center px-5 border-b border-[var(--border-muted)] bg-[var(--surface)]/80 backdrop-blur-xl">
       <div className="flex items-center gap-1.5">
-        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[var(--accent)] to-cyan-700 flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-cyan-500/20">
-          AI
+        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 via-violet-500 to-purple-600 flex items-center justify-center shadow-md shadow-violet-500/25">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="4" width="7" height="7" rx="1.5" fill="white" fillOpacity="0.25" stroke="white" />
+            <rect x="14" y="4" width="7" height="7" rx="1.5" fill="white" fillOpacity="0.25" stroke="white" />
+            <rect x="8.5" y="13" width="7" height="7" rx="1.5" fill="white" fillOpacity="0.35" stroke="white" />
+            <circle cx="6.5" cy="7.5" r="1" fill="white" /><circle cx="17.5" cy="7.5" r="1" fill="white" /><circle cx="12" cy="16.5" r="1" fill="white" />
+          </svg>
         </div>
-        <h1 className="font-semibold text-[var(--foreground)] tracking-tight ml-1">
-          AIPlayground
+        <h1 className="font-semibold text-[var(--foreground)] tracking-tight ml-1 text-[15px]" style={{ fontFamily: "var(--font-outfit), var(--font-sans)" }}>
+          NeuroBlocks
         </h1>
       </div>
 

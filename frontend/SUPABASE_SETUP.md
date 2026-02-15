@@ -1,4 +1,4 @@
-# Supabase setup for AIPlayground auth
+# Supabase setup for NeuroBlocks auth
 
 ## 1. Create a Supabase project
 

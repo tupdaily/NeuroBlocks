@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /* =========================================================================
-   AIPlayground — Design System v3 (Light Theme)
+   NeuroBlocks — Design System v3 (Light Theme)
    ========================================================================= 
    A clean, warm light theme designed for learning and exploration.
    Inspired by Lobe.ai, Apple HIG, and Figment — the UI recedes so
@@ -191,6 +191,7 @@ html[data-theme="dark"] {
   --color-foreground:           var(--foreground);
   --font-sans:                  var(--font-inter);
   --font-mono:                  var(--font-jetbrains-mono);
+  --font-brand:                 var(--font-outfit);
   --color-neural-bg:            var(--neural-bg);
   --color-neural-surface:       var(--neural-surface);
   --color-neural-border:        var(--neural-border);
@@ -238,6 +239,13 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--foreground-muted);
+}
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
 }
 
 /* ── Selection ───────────────────────────────────────────────────────── */

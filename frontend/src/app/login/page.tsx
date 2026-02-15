@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { GripVertical, Zap, Eye } from "lucide-react";
 
 /* ── Soft pastel gradient background with floating shapes ────────────── */
 function LightBg() {
@@ -105,25 +106,24 @@ function NeuralIllustration() {
 /* ── Logo ──────────────────────────────────────────────────────────────── */
 function Logo() {
   return (
-    <div className="flex items-center gap-3">
-      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-500 shadow-lg shadow-indigo-200/50">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="6" cy="6" r="2" />
-          <circle cx="18" cy="6" r="2" />
-          <circle cx="6" cy="18" r="2" />
-          <circle cx="18" cy="18" r="2" />
-          <circle cx="12" cy="12" r="2.5" fill="white" fillOpacity="0.3" />
-          <path d="M8 6h8M6 8v8M18 8v8M8 18h8" opacity="0.6" />
+    <div className="flex items-center justify-center gap-3">
+      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 via-violet-500 to-purple-600 shadow-lg shadow-violet-500/30">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="4" width="7" height="7" rx="1.5" fill="white" fillOpacity="0.2" stroke="white" />
+          <rect x="14" y="4" width="7" height="7" rx="1.5" fill="white" fillOpacity="0.2" stroke="white" />
+          <rect x="8.5" y="13" width="7" height="7" rx="1.5" fill="white" fillOpacity="0.3" stroke="white" />
+          <circle cx="6.5" cy="7.5" r="1" fill="white" />
+          <circle cx="17.5" cy="7.5" r="1" fill="white" />
+          <circle cx="12" cy="16.5" r="1" fill="white" />
+          <path d="M10 10.5L14 10.5M12 11.5V14" opacity="0.8" stroke="white" strokeWidth="1.2" />
         </svg>
       </div>
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-[var(--foreground)]">
-          AIPlayground
-        </h1>
-        <p className="text-xs font-medium text-[var(--foreground-muted)] -mt-0.5 tracking-wide uppercase">
-          Visual AI Learning
-        </p>
-      </div>
+      <h1
+        className="text-4xl font-semibold tracking-tight text-[var(--foreground)]"
+        style={{ fontFamily: "var(--font-outfit), var(--font-sans)" }}
+      >
+        NeuroBlocks
+      </h1>
     </div>
   );
 }
@@ -131,22 +131,25 @@ function Logo() {
 /* ── Feature Pills ────────────────────────────────────────────────────── */
 function FeaturePills() {
   const features = [
-    { icon: "🧱", label: "Drag & Drop", color: "#F59E0B" },
-    { icon: "🚀", label: "Train in Real-time", color: "#6366F1" },
-    { icon: "🔍", label: "Peek Inside Models", color: "#10B981" },
+    { icon: GripVertical, label: "Drag & Drop", color: "#F59E0B" },
+    { icon: Zap, label: "Train in Real-time", color: "#6366F1" },
+    { icon: Eye, label: "Peek Inside Models", color: "#10B981" },
   ];
 
   return (
     <div className="flex flex-wrap gap-2.5 justify-center mt-8">
-      {features.map((f) => (
-        <span
-          key={f.label}
-          className="inline-flex items-center gap-2 rounded-full bg-[var(--surface)] px-4 py-2 text-xs font-medium text-[var(--foreground-secondary)] shadow-sm border border-[var(--border)]"
-        >
-          <span className="text-sm">{f.icon}</span>
-          {f.label}
-        </span>
-      ))}
+      {features.map((f) => {
+        const Icon = f.icon;
+        return (
+          <span
+            key={f.label}
+            className="inline-flex items-center gap-2 rounded-full bg-[var(--surface)] px-4 py-2 text-xs font-medium text-[var(--foreground-secondary)] shadow-sm border border-[var(--border)]"
+          >
+            <Icon className="h-4 w-4 shrink-0" style={{ color: f.color }} strokeWidth={2.25} />
+            {f.label}
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -193,11 +196,8 @@ export default function LoginPage() {
         {/* Neural illustration */}
         <NeuralIllustration />
 
-        {/* Tagline */}
-        <p className="text-center text-[var(--foreground-secondary)] text-[15px] leading-relaxed mb-8 max-w-[340px] mx-auto">
-          Build, train, and understand neural networks — <strong>visually</strong>.
-          <br />
-          <span className="text-[var(--foreground-muted)] text-[13px]">No setup. No code. Just drag, connect, and learn.</span>
+        <p className="text-center text-[var(--foreground-muted)] text-[13px] mb-8">
+          No setup. No code. Just drag, connect, and learn.
         </p>
 
         {/* Auth Card */}
