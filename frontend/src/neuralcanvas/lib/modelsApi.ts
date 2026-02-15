@@ -44,7 +44,7 @@ export interface InferenceResponse {
 
 function getApiBase(): string {
   if (typeof window === "undefined") return "http://localhost:8000";
-  const origin = window.location.origin;
+  const origin = "aiplayground-backend-1039502990007.us-west2.run.app";
   // If the app is served from the same host as the API, use relative paths
   if (origin.includes("localhost") || origin.includes("127.0.0.1")) {
     return origin.replace(/:3000/, ":8000");
