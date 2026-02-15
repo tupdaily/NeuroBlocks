@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 # Configure GPU resources for inference (smaller than training)
 gpu_config_inference = LiveServerless(
-    name="aiplayground-inference-v1",
+    name="aiplayground-inference-deployed",
     gpus=[GpuGroup.AMPERE_24],
     workersMax=2,
     workersMin=0,
