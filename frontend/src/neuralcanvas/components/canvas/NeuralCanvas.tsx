@@ -49,6 +49,7 @@ import {
 } from "@/neuralcanvas/components/peep-inside/PeepInsideContext";
 import { PeepInsideModal } from "@/neuralcanvas/components/peep-inside/PeepInsideModal";
 import { TrainingPanel } from "@/neuralcanvas/components/training/TrainingPanel";
+import { InferencePanel } from "@/neuralcanvas/components/inference/InferencePanel";
 import {
   GradientFlowProvider,
   useGradientFlow,
@@ -58,6 +59,7 @@ import type { GraphSchema } from "@/types/graph";
 import { createPlayground, updatePlayground, getPlayground } from "@/lib/supabase/playgrounds";
 import { upsertPaperProgress } from "@/lib/supabase/paperProgress";
 import { insertChatMessage, getChatHistory } from "@/lib/supabase/userHistories";
+import { createClient } from "@/lib/supabase/client";
 import { getApiBase } from "@/neuralcanvas/lib/trainingApi";
 import ReactMarkdown from "react-markdown";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -236,6 +238,8 @@ function CanvasInner({
   const { takeSnapshot, undo, redo } = useUndoRedo();
   const [panOnDrag, setPanOnDrag] = useState(true);
   const [trainingPanelOpen, setTrainingPanelOpen] = useState(false);
+  const [inferencePanelOpen, setInferencePanelOpen] = useState(false);
+  const [userId, setUserId] = useState<string | undefined>();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const idCounter = useRef(100);
   const reactFlowInstance = useReactFlow();
@@ -258,6 +262,17 @@ function CanvasInner({
       cancelled = true;
     };
   }, [playgroundId]);
+
+  // ── Load user ID from Supabase auth session ──
+  useEffect(() => {
+    const supabase = createClient();
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUserId(session?.user?.id);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   // ── Drag-and-drop from palette ──
   const onDragOver = useCallback((e: React.DragEvent) => {
@@ -700,13 +715,28 @@ function CanvasInner({
               open={trainingPanelOpen}
               onToggle={() => setTrainingPanelOpen((o) => !o)}
             />
+            {playgroundId && (
+              <InferenceToggle
+                open={inferencePanelOpen}
+                onToggle={() => setInferencePanelOpen((o) => !o)}
+              />
+            )}
             <TrainingPanel
               open={trainingPanelOpen}
               onClose={() => setTrainingPanelOpen(false)}
               nodes={nodes}
               edges={edges}
               compact
+              playgroundId={playgroundId}
+              userId={userId}
             />
+            {playgroundId && (
+              <InferencePanel
+                open={inferencePanelOpen}
+                onClose={() => setInferencePanelOpen(false)}
+                playgroundId={playgroundId}
+              />
+            )}
           </div>
         )}
       </div>
@@ -1017,6 +1047,49 @@ function TrainingToggle({
         <line x1="12" y1="22.08" x2="12" y2="12" />
       </svg>
       Train
+    </button>
+  );
+}
+
+// ── Inference toggle button ──
+function InferenceToggle({
+  open,
+  onToggle,
+}: {
+  open: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      onClick={onToggle}
+      className={`
+        flex items-center gap-2 px-3 py-1.5 rounded-full
+        border backdrop-blur text-[10px] font-mono font-semibold
+        transition-all duration-200 select-none
+        ${
+          open
+            ? "bg-neural-accent/20 border-neural-accent/50 text-neural-accent-light shadow-[0_0_20px_rgba(139,92,246,0.15)]"
+            : "bg-neural-surface/80 border-neural-border text-neutral-500 hover:text-neutral-300 hover:border-neutral-600"
+        }
+      `}
+      title={open ? "Close inference panel" : "Open inference panel"}
+    >
+      <svg
+        width="12"
+        height="12"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        <circle cx="9" cy="10" r="1" />
+        <circle cx="12" cy="10" r="1" />
+        <circle cx="15" cy="10" r="1" />
+      </svg>
+      Inference
     </button>
   );
 }

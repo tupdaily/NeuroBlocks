@@ -10,8 +10,14 @@ class Settings(BaseSettings):
     runpod_api_key: str = ""
     runpod_enabled: bool = False
     backend_url: str = "http://localhost:8000"
-    runpod_callback_enabled: bool = True
+    runpod_callback_enabled: bool = False
     openai_api_key: str = ""
+
+    # Supabase configuration
+    supabase_url: str = ""
+    supabase_key: str = ""  # Fallback for backward compatibility
+    supabase_anon_key: str = ""  # Anon key for frontend operations
+    supabase_service_role_key: str = ""  # Service role key for backend operations
 
     class Config:
         env_file = ".env"

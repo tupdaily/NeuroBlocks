@@ -17,9 +17,11 @@ import {
   startTraining,
   openTrainingWebSocket,
   stopTraining,
+  fetchDatasets,
   type GraphSchema,
   type TrainingConfigSchema,
 } from "@/neuralcanvas/lib/trainingApi";
+import { saveTrainedModel } from "@/neuralcanvas/lib/modelsApi";
 import type { TrainingStatus, EpochMetric, BatchUpdate } from "./types";
 import { LiveTrainingOverlay } from "./LiveTrainingOverlay";
 import { Play, Square, X, AlertTriangle, Database, Settings2, Zap } from "lucide-react";
@@ -30,6 +32,8 @@ interface TrainingPanelProps {
   nodes: Node[];
   edges: Edge[];
   compact?: boolean;
+  playgroundId?: string;
+  userId?: string;
 }
 
 const DEFAULT_CONFIG: TrainingConfigSchema = {
@@ -49,7 +53,9 @@ const SETTING_HINTS: Record<string, string> = {
   train_split: "Fraction of data used for training (rest for validation)",
 };
 
-export function TrainingPanel({ open: isOpen, onClose, nodes, edges, compact }: TrainingPanelProps) {
+export function TrainingPanel({ open: isOpen, onClose, nodes, edges, compact, playgroundId, userId }: TrainingPanelProps) {
+  const [datasets, setDatasets] = useState<{ id: string; name: string; description: string }[]>([]);
+  const [datasetError, setDatasetError] = useState<string | null>(null);
   const [config, setConfig] = useState<TrainingConfigSchema>(DEFAULT_CONFIG);
   const [status, setStatus] = useState<TrainingStatus>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -70,6 +76,35 @@ export function TrainingPanel({ open: isOpen, onClose, nodes, edges, compact }: 
     }
     return null;
   }, [nodes]);
+
+  // Model save dialog state
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [modelName, setModelName] = useState("");
+  const [modelDescription, setModelDescription] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [savingSuccess, setSavingSuccess] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    fetchDatasets()
+      .then((list) => {
+        if (!cancelled) {
+          setDatasets(list);
+          setDatasetError(null);
+        }
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setDatasetError(e instanceof Error ? e.message : "Failed to load datasets");
+          setDatasets([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]);
 
   const { graph, error: graphError } = useMemo(
     () => serializeGraphForTraining(nodes, edges),
@@ -124,6 +159,11 @@ export function TrainingPanel({ open: isOpen, onClose, nodes, edges, compact }: 
           if (type === "completed" || type === "stopped") {
             setStatus(type === "completed" ? "completed" : "stopped");
             setLatestBatch(null);
+            // Show save dialog if training completed successfully
+            if (type === "completed") {
+              setShowSaveDialog(true);
+              setModelName(`Model-${new Date().toLocaleTimeString().replace(/:/g, "-")}`);
+            }
             closeWsRef.current?.();
             closeWsRef.current = null;
           }
@@ -154,7 +194,72 @@ export function TrainingPanel({ open: isOpen, onClose, nodes, edges, compact }: 
     setStatus("stopped");
   }, [jobId]);
 
-  useEffect(() => { return () => { closeWsRef.current?.(); }; }, []);
+  const handleSaveModel = useCallback(async () => {
+    if (!graph || !lastMessage || lastMessage.type !== "completed") {
+      setSaveError("No trained model available to save");
+      return;
+    }
+
+    if (!modelName.trim()) {
+      setSaveError("Model name is required");
+      return;
+    }
+
+    if (!playgroundId) {
+      setSaveError("Playground ID not available. Cannot save model.");
+      return;
+    }
+
+    if (!userId) {
+      setSaveError("User ID not available. Please ensure you are logged in.");
+      return;
+    }
+
+    setIsSaving(true);
+    setSaveError(null);
+
+    try {
+      const finalMetrics = {
+        loss: lastMessage.final_metrics?.loss || null,
+        accuracy: lastMessage.final_metrics?.accuracy || null,
+        history: lastMessage.final_metrics?.history,
+      };
+
+      const saveRequest = {
+        playground_id: playgroundId,
+        user_id: userId,
+        model_name: modelName.trim(),
+        description: modelDescription.trim() || undefined,
+        model_state_dict_b64: (lastMessage.model_state_dict_b64 as string) || "",
+        graph_json: graph,
+        training_config: config,
+        final_metrics: finalMetrics,
+      };
+
+      const result = await saveTrainedModel(saveRequest);
+      setSavingSuccess(true);
+      setShowSaveDialog(false);
+      setModelName("");
+      setModelDescription("");
+
+      // Auto-close success message after 3 seconds
+      setTimeout(() => {
+        setSavingSuccess(false);
+      }, 3000);
+
+      console.log("Model saved successfully:", result.model_id);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Failed to save model");
+    } finally {
+      setIsSaving(false);
+    }
+  }, [graph, lastMessage, modelName, modelDescription, config, playgroundId, userId]);
+
+  useEffect(() => {
+    return () => {
+      closeWsRef.current?.();
+    };
+  }, []);
 
   if (!isOpen) return null;
 
@@ -335,6 +440,76 @@ export function TrainingPanel({ open: isOpen, onClose, nodes, edges, compact }: 
             totalBatches={totalBatches}
             latestBatch={latestBatch}
           />
+        )}
+
+        {showSaveDialog && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className="bg-neural-surface border border-neural-border rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl">
+              <h3 className="text-lg font-semibold text-white font-mono mb-4">Save Trained Model</h3>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-medium text-neutral-400 font-mono mb-2">
+                    Model Name
+                  </label>
+                  <input
+                    type="text"
+                    value={modelName}
+                    onChange={(e) => setModelName(e.target.value)}
+                    placeholder="e.g., MNIST Classifier v1"
+                    className="w-full px-3 py-2 rounded-lg bg-neural-bg border border-neural-border text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-neural-accent"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-neutral-400 font-mono mb-2">
+                    Description (optional)
+                  </label>
+                  <textarea
+                    value={modelDescription}
+                    onChange={(e) => setModelDescription(e.target.value)}
+                    placeholder="Add notes about this model..."
+                    rows={3}
+                    className="w-full px-3 py-2 rounded-lg bg-neural-bg border border-neural-border text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-neural-accent resize-none"
+                  />
+                </div>
+
+                {saveError && (
+                  <div className="rounded-lg bg-red-500/10 border border-red-500/30 text-red-200 text-xs p-3 font-mono">
+                    {saveError}
+                  </div>
+                )}
+
+                {savingSuccess && (
+                  <div className="rounded-lg bg-green-500/10 border border-green-500/30 text-green-200 text-xs p-3 font-mono">
+                    Model saved successfully!
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSaveDialog(false);
+                    setSaveError(null);
+                  }}
+                  disabled={isSaving}
+                  className="flex-1 px-4 py-2.5 rounded-lg border border-neural-border text-neutral-300 hover:bg-neural-border text-sm font-mono font-semibold disabled:opacity-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveModel}
+                  disabled={isSaving || !modelName.trim()}
+                  className="flex-1 px-4 py-2.5 rounded-lg bg-neural-accent hover:bg-neural-accent-light text-white text-sm font-mono font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isSaving ? "Saving…" : "Save Model"}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>

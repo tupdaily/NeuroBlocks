@@ -65,3 +65,31 @@ class ValidationResult(BaseModel):
     shapes: dict[str, list[int]] | None = None
     total_params: int | None = None
     errors: list[dict[str, str]] | None = None
+
+
+class TrainingMetrics(BaseModel):
+    loss: float | None = None
+    accuracy: float | None = None
+    history: list[dict[str, Any]] | None = None
+
+
+class SaveModelRequest(BaseModel):
+    playground_id: str
+    user_id: str
+    model_name: str
+    description: str | None = None
+    model_state_dict_b64: str
+    graph_json: GraphSchema
+    training_config: TrainingConfig
+    final_metrics: TrainingMetrics
+
+
+class InferenceRequest(BaseModel):
+    input_tensor: list[list[float]]  # 2D array: [batch_size, features...]
+
+
+class InferenceResponse(BaseModel):
+    output: list[list[float]]  # 2D array: [batch_size, output_classes...]
+    shape: list[int]
+    inference_time_ms: float | None = None
+    model_id: str | None = None
