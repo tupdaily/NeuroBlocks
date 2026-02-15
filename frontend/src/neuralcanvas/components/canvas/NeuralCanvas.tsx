@@ -240,6 +240,7 @@ function CanvasInner({
   const [trainingPanelOpen, setTrainingPanelOpen] = useState(false);
   const [inferencePanelOpen, setInferencePanelOpen] = useState(false);
   const [userId, setUserId] = useState<string | undefined>();
+  const [effectivePlaygroundId, setEffectivePlaygroundId] = useState<string | undefined>(playgroundId);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const idCounter = useRef(100);
   const reactFlowInstance = useReactFlow();
@@ -251,9 +252,13 @@ function CanvasInner({
 
   // ── Load chat history from Supabase when playground loads ──
   useEffect(() => {
-    if (!playgroundId) return;
+    setEffectivePlaygroundId(playgroundId);
+  }, [playgroundId]);
+
+  useEffect(() => {
+    if (!effectivePlaygroundId) return;
     let cancelled = false;
-    getChatHistory(playgroundId)
+    getChatHistory(effectivePlaygroundId)
       .then((history) => {
         if (!cancelled) setFeedbackMessages(history);
       })
@@ -261,7 +266,7 @@ function CanvasInner({
     return () => {
       cancelled = true;
     };
-  }, [playgroundId]);
+  }, [effectivePlaygroundId]);
 
   // ── Load user ID from Supabase auth session ──
   useEffect(() => {
@@ -428,7 +433,7 @@ function CanvasInner({
     setSaveStatus("saving");
     try {
       let metadata: { name?: string; created_at?: string } | undefined;
-      const row = playgroundId ? await getPlayground(playgroundId) : null;
+      const row = effectivePlaygroundId ? await getPlayground(effectivePlaygroundId) : null;
       if (row) {
         metadata = {
           name: row.name,
@@ -442,9 +447,9 @@ function CanvasInner({
         edges,
         metadata
       );
-      if (playgroundId) {
+      if (effectivePlaygroundId) {
         const ok = await updatePlayground(
-          playgroundId,
+          effectivePlaygroundId,
           graph,
           row?.name ?? graph.metadata?.name
         );
@@ -454,6 +459,7 @@ function CanvasInner({
         const result = await createPlayground(graph);
         if (result) {
           setSaveStatus("saved");
+          setEffectivePlaygroundId(result.id);
           router.replace(`/playground/${result.id}`);
           setTimeout(() => setSaveStatus("idle"), 1500);
         } else {
@@ -463,7 +469,7 @@ function CanvasInner({
     } catch {
       setSaveStatus("error");
     }
-  }, [nodes, edges, playgroundId, playgroundName, router, isPaperLevel, paperLevelNumber, paperStepIndex]);
+  }, [nodes, edges, effectivePlaygroundId, playgroundName, router, isPaperLevel, paperLevelNumber, paperStepIndex]);
 
   // ── Submit challenge (compare current graph to solution) ──
   const handleSubmitChallenge = useCallback(() => {
@@ -497,12 +503,12 @@ function CanvasInner({
         { role: "user", content: trimmed },
       ];
       setFeedbackMessages(newMessages);
-      if (playgroundId) {
-        insertChatMessage(playgroundId, "user", trimmed).catch(() => {});
+      if (effectivePlaygroundId) {
+        insertChatMessage(effectivePlaygroundId, "user", trimmed).catch(() => {});
       }
       setFeedbackLoading(true);
       try {
-        const row = playgroundId ? await getPlayground(playgroundId) : null;
+        const row = effectivePlaygroundId ? await getPlayground(effectivePlaygroundId) : null;
         const metadata = row
           ? { name: row.name, created_at: (row.graph_json as { metadata?: { created_at?: string } } | undefined)?.metadata?.created_at }
           : undefined;
@@ -525,20 +531,20 @@ function CanvasInner({
           assistantContent = data.feedback ?? "No response.";
         }
         setFeedbackMessages((m) => [...m, { role: "assistant", content: assistantContent }]);
-        if (playgroundId) {
-          insertChatMessage(playgroundId, "assistant", assistantContent).catch(() => {});
+        if (effectivePlaygroundId) {
+          insertChatMessage(effectivePlaygroundId, "assistant", assistantContent).catch(() => {});
         }
       } catch (e) {
         const assistantContent = e instanceof Error ? e.message : "Failed to get feedback.";
         setFeedbackMessages((m) => [...m, { role: "assistant", content: assistantContent }]);
-        if (playgroundId) {
-          insertChatMessage(playgroundId, "assistant", assistantContent).catch(() => {});
+        if (effectivePlaygroundId) {
+          insertChatMessage(effectivePlaygroundId, "assistant", assistantContent).catch(() => {});
         }
       } finally {
         setFeedbackLoading(false);
       }
     },
-    [nodes, edges, playgroundId, feedbackMessages]
+    [nodes, edges, effectivePlaygroundId, feedbackMessages]
   );
 
   // ── Keyboard shortcuts ──
@@ -715,7 +721,7 @@ function CanvasInner({
               open={trainingPanelOpen}
               onToggle={() => setTrainingPanelOpen((o) => !o)}
             />
-            {playgroundId && (
+            {effectivePlaygroundId && (
               <InferenceToggle
                 open={inferencePanelOpen}
                 onToggle={() => setInferencePanelOpen((o) => !o)}
@@ -727,14 +733,15 @@ function CanvasInner({
               nodes={nodes}
               edges={edges}
               compact
-              playgroundId={playgroundId}
+              playgroundId={effectivePlaygroundId}
               userId={userId}
+              onPlaygroundCreated={setEffectivePlaygroundId}
             />
-            {playgroundId && (
+            {effectivePlaygroundId && (
               <InferencePanel
                 open={inferencePanelOpen}
                 onClose={() => setInferencePanelOpen(false)}
-                playgroundId={playgroundId}
+                playgroundId={effectivePlaygroundId}
               />
             )}
           </div>

@@ -6,7 +6,7 @@ import asyncio
 
 # Configure GPU resources for RunPod Flash
 gpu_config = LiveServerless(
-    name="aiplayground-training-peter",  # Static name for endpoint reuse
+    name="aiplayground-training-blocks",  # Static name for endpoint reuse
     gpus=[GpuGroup.AMPERE_24],  # Using A4000/RTX 3090 (24GB) - more available and cheaper
     workersMax=1,  # Reduced to 1 for faster initialization
     workersMin=0,  # Auto-scale from 0 (no idle workers)

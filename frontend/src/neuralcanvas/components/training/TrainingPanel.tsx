@@ -25,6 +25,8 @@ import { saveTrainedModel } from "@/neuralcanvas/lib/modelsApi";
 import type { TrainingStatus, EpochMetric, BatchUpdate } from "./types";
 import { LiveTrainingOverlay } from "./LiveTrainingOverlay";
 import { Play, Square, X, AlertTriangle, Database, Settings2, Zap } from "lucide-react";
+import { createPlayground } from "@/lib/supabase/playgrounds";
+import { neuralCanvasToGraphSchema } from "@/lib/levelGraphAdapter";
 
 interface TrainingPanelProps {
   open: boolean;
@@ -34,6 +36,7 @@ interface TrainingPanelProps {
   compact?: boolean;
   playgroundId?: string;
   userId?: string;
+  onPlaygroundCreated?: (id: string) => void;
 }
 
 const DEFAULT_CONFIG: TrainingConfigSchema = {
@@ -53,7 +56,7 @@ const SETTING_HINTS: Record<string, string> = {
   train_split: "Fraction of data used for training (rest for validation)",
 };
 
-export function TrainingPanel({ open: isOpen, onClose, nodes, edges, compact, playgroundId, userId }: TrainingPanelProps) {
+export function TrainingPanel({ open: isOpen, onClose, nodes, edges, compact, playgroundId, userId, onPlaygroundCreated }: TrainingPanelProps) {
   const [datasets, setDatasets] = useState<{ id: string; name: string; description: string }[]>([]);
   const [datasetError, setDatasetError] = useState<string | null>(null);
   const [config, setConfig] = useState<TrainingConfigSchema>(DEFAULT_CONFIG);
@@ -205,11 +208,6 @@ export function TrainingPanel({ open: isOpen, onClose, nodes, edges, compact, pl
       return;
     }
 
-    if (!playgroundId) {
-      setSaveError("Playground ID not available. Cannot save model.");
-      return;
-    }
-
     if (!userId) {
       setSaveError("User ID not available. Please ensure you are logged in.");
       return;
@@ -219,14 +217,34 @@ export function TrainingPanel({ open: isOpen, onClose, nodes, edges, compact, pl
     setSaveError(null);
 
     try {
+      // Auto-create playground if it doesn't exist
+      let effectivePlaygroundId = playgroundId;
+      if (!effectivePlaygroundId) {
+        setSaveError("Creating playground for model storage...");
+        const playgroundGraph = neuralCanvasToGraphSchema(nodes, edges, {
+          name: `Auto-saved from model: ${modelName.trim()}`,
+          created_at: new Date().toISOString(),
+        });
+        const playgroundResult = await createPlayground(playgroundGraph);
+        if (!playgroundResult?.id) {
+          setSaveError("Failed to create playground for model storage");
+          setIsSaving(false);
+          return;
+        }
+        effectivePlaygroundId = playgroundResult.id;
+        setSaveError(null);
+        // Notify parent that playground was created
+        onPlaygroundCreated?.(effectivePlaygroundId);
+      }
+
       const finalMetrics = {
-        loss: lastMessage.final_metrics?.loss || null,
-        accuracy: lastMessage.final_metrics?.accuracy || null,
-        history: lastMessage.final_metrics?.history,
+        loss: ((lastMessage.final_metrics as Record<string, unknown>)?.loss as number | null) || null,
+        accuracy: ((lastMessage.final_metrics as Record<string, unknown>)?.accuracy as number | null) || null,
+        history: ((lastMessage.final_metrics as Record<string, unknown>)?.history as Record<string, unknown>[] | undefined),
       };
 
       const saveRequest = {
-        playground_id: playgroundId,
+        playground_id: effectivePlaygroundId,
         user_id: userId,
         model_name: modelName.trim(),
         description: modelDescription.trim() || undefined,
@@ -253,7 +271,7 @@ export function TrainingPanel({ open: isOpen, onClose, nodes, edges, compact, pl
     } finally {
       setIsSaving(false);
     }
-  }, [graph, lastMessage, modelName, modelDescription, config, playgroundId, userId]);
+  }, [graph, lastMessage, modelName, modelDescription, config, playgroundId, userId, nodes, edges, onPlaygroundCreated]);
 
   useEffect(() => {
     return () => {

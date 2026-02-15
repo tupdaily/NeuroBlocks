@@ -7,7 +7,7 @@ import time
 import logging
 from typing import Any
 from compiler.model_builder import build_model
-from models.schemas import InferenceResponse
+from models.schemas import GraphSchema, InferenceResponse
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +37,8 @@ async def run_inference_local(
 
         # Rebuild model from graph
         logger.info("Rebuilding model from graph...")
+        if isinstance(graph_json, dict):
+            graph_json = GraphSchema(**graph_json)
         model = build_model(graph_json)
         model.load_state_dict(state_dict)
         model.eval()
