@@ -15,10 +15,11 @@ router = APIRouter(prefix="/api/feedback", tags=["feedback"])
 
 # Allowed block types (must match frontend BlockType). "MaxPool" normalized to "MaxPool2D".
 ALLOWED_NODE_TYPES = frozenset({
-    "Input", "TextInput", "Output", "Linear", "Conv2D", "LSTM", "Attention",
-    "LayerNorm", "BatchNorm", "Activation", "Dropout", "Flatten", "Embedding",
-    "TextEmbedding", "PositionalEncoding", "PositionalEmbedding", "Softmax",
-    "Add", "Concat", "MaxPool2D", "MaxPool", "MaxPool1D",
+    "Input", "InputSpace", "Board", "TextInput", "Output", "Display",
+    "Linear", "Conv2D", "LSTM", "Attention", "LayerNorm", "BatchNorm",
+    "Activation", "Dropout", "Flatten", "Embedding", "TextEmbedding",
+    "PositionalEncoding", "PositionalEmbedding", "Softmax", "Add", "Concat",
+    "MaxPool2D", "MaxPool", "MaxPool1D",
 })
 # Normalized graphs use lowercase types; activation is "relu"/"gelu" etc. Accept both.
 ALLOWED_NODE_TYPES_LOWER = frozenset(
@@ -26,10 +27,17 @@ ALLOWED_NODE_TYPES_LOWER = frozenset(
     | {"relu", "gelu", "sigmoid", "tanh"}
 )
 
+# Source blocks (no incoming edges required); used for connectivity BFS
+SOURCE_TYPES = frozenset({"Input", "InputSpace", "Board", "TextInput"})
+SOURCE_TYPES_LOWER = frozenset({"input", "inputspace", "board", "textinput"})
+# Main model input - graph must have at least one
 INPUT_TYPES = frozenset({"Input", "TextInput"})
-OUTPUT_TYPES = frozenset({"Output"})
 INPUT_TYPES_LOWER = frozenset({"input", "textinput"})
+OUTPUT_TYPES = frozenset({"Output"})
 OUTPUT_TYPES_LOWER = frozenset({"output"})
+# Sink blocks (no outgoing edges required)
+SINK_TYPES = frozenset({"Output", "Display"})
+SINK_TYPES_LOWER = frozenset({"output", "display"})
 
 # Layout: horizontal spacing between "layers", same y per layer.
 LAYOUT_DX = 420
@@ -38,9 +46,12 @@ LAYOUT_DY_ROW = 100
 BLOCKS_AND_SHAPES_REFERENCE = """
 **Block types and tensor shapes (use these exactly):**
 
-- **Input**: Data input. No input port. One output. Params: optional input_shape as array of numbers (e.g. [3, 224, 224] for C,H,W; omit batch). Output shape e.g. [B, C, H, W] for images.
+- **Input**: Data input. One input port "in" (optional, for Custom Data or Board). One output. Params: optional input_shape as array of numbers (e.g. [3, 224, 224] for C,H,W; omit batch). Output shape e.g. [B, C, H, W] for images.
+- **InputSpace**: Custom data source. No input port. One output. Params: data_type ("image" | "table" | "text" | "webcam"), optional input_shape. Connect output to Input's "in" port for custom training data.
+- **Board**: Drawing canvas. No input port. One output. Params: width (8–224), height (8–224). User draws an image; output is resized and connected to Input for custom data.
 - **TextInput**: Token IDs for sequences. No input port. One output. Params: batch_size, seq_len. Output shape [B, seq_len].
 - **Output**: Model output (e.g. logits). One input port "in". No output. Must have exactly one Output in the graph.
+- **Display**: LCD-style display for predictions. One input port "in". No output. Optional; connect to Output or any tensor to show values. Shows no-signal when nothing connected.
 - **Linear**: Dense layer. Input: 2D [B, in_features]. Output: 2D [B, out_features]. Params: in_features, out_features.
 - **Conv2D**: 2D convolution. Input: 4D [B, C, H, W]. Output: 4D. Params: in_channels, out_channels, kernel_size (integer, e.g. 3), stride (integer, e.g. 1), padding (integer, e.g. 1; do not use "same").
 - **MaxPool2D** (or **MaxPool**): 2D max pooling. Input: 4D [B, C, H, W]. Output: 4D. Params: kernel_size (integer, e.g. 2), stride (integer, e.g. 2). Use type "MaxPool2D" or "MaxPool".
@@ -60,7 +71,7 @@ BLOCKS_AND_SHAPES_REFERENCE = """
 - **Add**: Element-wise sum of two inputs (residual). Two inputs: in_a, in_b. Use sourceHandle "out" → targetHandle "in_a" or "in_b".
 - **Concat**: Concatenate two inputs. Two inputs: in_a, in_b. Params: dim.
 
-**Connections:** Each edge has source (node id), target (node id), sourceHandle "out", targetHandle "in" (or "in_a"/"in_b" for Add/Concat). Every block except Input/TextInput must have at least one incoming edge. Every block except Output must have at least one outgoing edge. The graph must be connected: there must be a path from some Input or TextInput to the Output.
+**Connections:** Each edge has source (node id), target (node id), sourceHandle "out", targetHandle "in" (or "in_a"/"in_b" for Add/Concat). Every block except Input, InputSpace, Board, TextInput must have at least one incoming edge. Every block except Output and Display must have at least one outgoing edge. The graph must be connected: there must be a path from some Input, InputSpace, Board, or TextInput to the Output.
 """
 
 
@@ -164,6 +175,9 @@ def _validate_and_layout_suggested_graph(
     def _is_input(nd: dict) -> bool:
         t = (nd.get("type") or "").strip()
         return t in INPUT_TYPES or t.lower() in INPUT_TYPES_LOWER
+    def _is_sink(nd: dict) -> bool:
+        t = (nd.get("type") or "").strip()
+        return t in SINK_TYPES or t.lower() in SINK_TYPES_LOWER
     outputs = [n for n in out_nodes if _is_output(n)]
     if len(outputs) != 1:
         return (out_nodes, "The graph must have exactly one Output block.")
@@ -178,24 +192,27 @@ def _validate_and_layout_suggested_graph(
     for e in out_edges:
         out_neighbors[e["source"]].append(e["target"])
         in_neighbors[e["target"]].append(e["source"])
-    # 6. Every non-input node must have at least one incoming edge
+    # 6. Every non-source node must have at least one incoming edge
+    def _is_source(nd: dict) -> bool:
+        t = (nd.get("type") or "").strip()
+        return t in SOURCE_TYPES or t.lower() in SOURCE_TYPES_LOWER
     for n in out_nodes:
         nid = n["id"]
-        if _is_input(n):
+        if _is_source(n):
             continue
         if not in_neighbors[nid]:
-            return (out_nodes, f"Block {n['type']} (id {nid}) has no incoming connection. Every block except Input/TextInput must be connected from upstream.")
-    # 7. Every non-output node must have at least one outgoing edge
+            return (out_nodes, f"Block {n['type']} (id {nid}) has no incoming connection. Every block except Input, InputSpace, Board, TextInput must be connected from upstream.")
+    # 7. Every non-sink node must have at least one outgoing edge (Output and Display are sinks)
     for n in out_nodes:
         nid = n["id"]
-        if _is_output(n):
+        if _is_sink(n):
             continue
         if not out_neighbors[nid]:
-            return (out_nodes, f"Block {n['type']} (id {nid}) has no outgoing connection. Every block except Output must connect downstream.")
-    # 8. Connected: from any input we can reach the output (BFS)
-    input_ids = {n["id"] for n in inputs}
-    q = deque(input_ids)
-    seen = set(input_ids)
+            return (out_nodes, f"Block {n['type']} (id {nid}) has no outgoing connection. Every block except Output and Display must connect downstream.")
+    # 8. Connected: from any source (no incoming edges) we can reach the output (BFS)
+    source_ids = {nid for nid in node_ids if not in_neighbors[nid]}
+    q = deque(source_ids)
+    seen = set(source_ids)
     while q:
         cur = q.popleft()
         for adj in out_neighbors[cur]:
@@ -203,13 +220,13 @@ def _validate_and_layout_suggested_graph(
                 seen.add(adj)
                 q.append(adj)
     if output_id not in seen:
-        return (out_nodes, "The graph is not connected: there is no path from any Input/TextInput to the Output.")
-    # 9. Every node reachable from some input (no orphans)
+        return (out_nodes, "The graph is not connected: there is no path from any Input/InputSpace/Board/TextInput to the Output.")
+    # 9. Every node reachable from some source (no orphans)
     if len(seen) != len(node_ids):
         orphans = node_ids - seen
-        return (out_nodes, f"Some blocks are not connected to the flow: {orphans}. All blocks must be reachable from an Input/TextInput.")
+        return (out_nodes, f"Some blocks are not connected to the flow: {orphans}. All blocks must be reachable from a source (Input, InputSpace, Board, or TextInput).")
     # 10. Assign layout: depth = max(predecessor depths) + 1 so every node is right of all its inputs
-    depth: dict[str, int] = {iid: 0 for iid in input_ids}
+    depth: dict[str, int] = {iid: 0 for iid in source_ids}
     changed = True
     while changed:
         changed = False
