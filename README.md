@@ -1,4 +1,4 @@
-# AIPlayground
+# NeuroBlocks
 
 A visual playground for building and training neural networks: drag-and-drop blocks, connect layers, save to Supabase, and run challenges.
 
@@ -7,7 +7,7 @@ A visual playground for building and training neural networks: drag-and-drop blo
 Everything lives under two main folders:
 
 ```
-AIPlayground/
+neuroblocks/
 ├── frontend/          # Next.js app (App Router, TypeScript, Tailwind)
 │   └── src/
 │       ├── app/             # Routes: /, /playground, /playground/[id], /login, etc.
